@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map of Interest</title>
+    <style>
+        #map {
+            height: 60vh;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .poi-form {
+            margin-bottom: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Map of Interest</h1>
+        <div id="map"></div>
+        <form class="poi-form" id="poiForm">
+            <h2>Add a Point of Interest</h2>
+            <label>Category:<br>
+                <select id="poiCategory" required></select>
+            </label><br><br>
+            <label>Name:<br><input type="text" id="poiName" required></label><br><br>
+            <label>Description:<br><textarea id="poiDescription" required></textarea></label><br><br>
+            <input type="hidden" id="poiLat">
+            <input type="hidden" id="poiLng">
+            <button type="submit">Add POI</button>
+            <p id="formHint">Click on the map to select a location.</p>
+        </form>
+        <div style="margin-bottom: 20px;">
+            <label>Filter by Category:
+                <select id="filterCategory"></select>
+            </label>
+        </div>
+        <div id="poiList">
+            <h2>Points of Interest</h2>
+            <ul id="poiItems"></ul>
+        </div>
+    </div>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        // Hardcoded categories for now
+        const categories = [
+            { id: 1, name: 'Restaurant' },
+            { id: 2, name: 'Park' },
+            { id: 3, name: 'Museum' },
+            { id: 4, name: 'Shop' },
+            { id: 5, name: 'Other' }
+        ];
+ 
+        // Populate category selects
+        function populateCategorySelects() {
+            const catSelect = document.getElementById('poiCategory');
+            const filterSelect = document.getElementById('filterCategory');
+            catSelect.innerHTML = '';
+            filterSelect.innerHTML = '<option value="all">All</option>';
+            categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat.id;
+                opt.textContent = cat.name;
+                catSelect.appendChild(opt);
+                const filterOpt = opt.cloneNode(true);
+                filterSelect.appendChild(filterOpt);
+            });
+        }
+ 
+        let map = L.map('map').setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        let marker;
+        let pois = [];
+        let poiMarkers = [];
+
+        map.on('click', function(e) {
+            if (marker) map.removeLayer(marker);
+            marker = L.marker(e.latlng).addTo(map);
+            document.getElementById('poiLat').value = e.latlng.lat;
+            document.getElementById('poiLng').value = e.latlng.lng;
+        });
+
+        document.getElementById('poiForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const categoryId = document.getElementById('poiCategory').value;
+            const name = document.getElementById('poiName').value;
+            const description = document.getElementById('poiDescription').value;
+            const lat = document.getElementById('poiLat').value;
+            const lng = document.getElementById('poiLng').value;
+            if (!lat || !lng) {
+                alert('Please select a location on the map.');
+                return;
+            }
+            const poi = {
+                categoryId,
+                name,
+                description,
+                lat,
+                lng
+            };
+            pois.push(poi);
+            renderPOIs();
+            document.getElementById('poiForm').reset();
+            if (marker) map.removeLayer(marker);
+        });
+
+        document.getElementById('filterCategory').addEventListener('change', function() {
+            renderPOIs();
+        });
+
+        function renderPOIs() {
+            // Remove all POI markers
+            poiMarkers.forEach(m => map.removeLayer(m));
+            poiMarkers = [];
+            // Clear list
+            const ul = document.getElementById('poiItems');
+            ul.innerHTML = '';
+            const selectedCat = document.getElementById('filterCategory').value;
+            pois.forEach(poi => {
+                if (selectedCat !== 'all' && poi.categoryId !== selectedCat) return;
+                // Add marker
+                const m = L.marker([poi.lat, poi.lng]).addTo(map);
+                m.bindPopup(`<b>${poi.name}</b><br>${poi.description}`);
+                poiMarkers.push(m);
+                // Add to list
+                const li = document.createElement('li');
+                const catName = categories.find(c => c.id == poi.categoryId)?.name || '';
+                li.textContent = `[${catName}] ${poi.name} (${poi.lat}, ${poi.lng}): ${poi.description}`;
+                ul.appendChild(li);
+            });
+        }
+
+        // Initialize
+        populateCategorySelects();
+        renderPOIs();
+    </script>
+</body>
+</html>
