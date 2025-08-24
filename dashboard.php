@@ -51,7 +51,7 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Map of Interest</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <style>
         html, body, .full-height { height: 100%; margin: 0; padding: 0; }
         body, .container-fluid, .row.full-height, .left-pane, .right-pane { height: 100vh !important; min-height: 100vh; }
@@ -149,7 +149,7 @@ try {
         </div>
     </div>
 </div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/vendor/leaflet/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const pois = <?php echo json_encode($pois); ?>;
@@ -199,7 +199,6 @@ function filterPOIs() {
 document.addEventListener('DOMContentLoaded', function() {
     // Ensure map container fills parent
     var mapDiv = document.getElementById('map');
-    mapDiv.style.height = mapDiv.parentElement.offsetHeight + 'px';
     map = L.map('map').setView([48.858844, 2.294351], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
