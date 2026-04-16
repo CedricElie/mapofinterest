@@ -13,7 +13,10 @@ model User {
   password  String
   createdAt DateTime @default(now())
   pois       Poi[]
-  categories Category[] @relation("UserCategories")
+  categories       Category[] @relation("UserCategories")
+  sentRequests     Friendship[] @relation("SentRequests")
+  receivedRequests Friendship[] @relation("ReceivedRequests")
+  notifications    Notification[]
 }
 
 model Category {
@@ -42,4 +45,26 @@ model Poi {
   category    Category @relation(fields: [categoryId], references: [id])
   
   createdAt   DateTime @default(now())
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      String   @default("PENDING") // 'PENDING' or 'ACCEPTED'
+  createdAt   DateTime @default(now())
+  
+  requester   User     @relation("SentRequests", fields: [requesterId], references: [id])
+  addressee   User     @relation("ReceivedRequests", fields: [addresseeId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // e.g. 'FRIEND_ACCEPTED'
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id])
 }

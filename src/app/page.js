@@ -18,6 +18,19 @@ export default function Home() {
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Social Graph States
+  const [currentUser, setCurrentUser] = useState(null);
+  const [friendsData, setFriendsData] = useState({ pendingRequests: [], friends: [] });
+  const [notifications, setNotifications] = useState([]);
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [friendSearchQuery, setFriendSearchQuery] = useState('');
+  const [friendSearchResults, setFriendSearchResults] = useState([]);
+  const [activeFriendTab, setActiveFriendTab] = useState('friends'); // 'friends', 'add', 'requests'
+  const [sharePoiTarget, setSharePoiTarget] = useState(null);
+  const [selectedSharePins, setSelectedSharePins] = useState([]);
+  const [isSharingData, setIsSharingData] = useState(false);
+
   // Geocoding Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -89,20 +102,35 @@ export default function Home() {
 
     const loadConfigs = async () => {
       try {
-        const [catRes, pinRes] = await Promise.all([
+        const [userRes, catRes, pinRes, friendsRes, notifRes] = await Promise.all([
+          fetch('/api/user/me'),
           fetch('/api/categories'),
-          fetch('/api/pins')
+          fetch('/api/pins'),
+          fetch('/api/friends'),
+          fetch('/api/notifications')
         ]);
         if (!pinRes.ok) {
-          if (pinRes.status === 401) window.location.href = '/login';
-          return;
+           if (pinRes.status === 401) window.location.href='/login';
+           return;
         }
+        
+        const userData = await userRes.json();
+        setCurrentUser(userData);
 
         const catData = await catRes.json();
         setCategories(catData);
-
+        
         const data = await pinRes.json();
         setPins(data);
+
+        if (friendsRes.ok) {
+          const fData = await friendsRes.json();
+          setFriendsData(fData);
+        }
+        if (notifRes.ok) {
+          const nData = await notifRes.json();
+          setNotifications(nData.notifications);
+        }
 
         if (data && data.length > 0) {
           const lastPin = data[data.length - 1];
@@ -219,6 +247,84 @@ export default function Home() {
     } finally {
       setIsUploading(false);
     }
+  };
+
+  // Social Methods
+  const handleFriendSearch = async (val) => {
+    setFriendSearchQuery(val);
+    if (val.length < 2) { setFriendSearchResults([]); return; }
+    try {
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(val)}`);
+      const data = await res.json();
+      setFriendSearchResults(data);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleSendRequest = async (addresseeId) => {
+    try {
+      const res = await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addresseeId })
+      });
+      if (res.ok) {
+        setFriendSearchResults(prev => prev.map(u => u.id === addresseeId ? { ...u, friendshipStatus: 'PENDING', isSender: true } : u));
+      } else { 
+        const d = await res.json(); 
+        alert(d.error); 
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  const handleFriendRespond = async (friendshipId, action) => {
+    try {
+      const res = await fetch('/api/friends/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ friendshipId, action })
+      });
+      if (res.ok) {
+        setFriendsData(prev => ({
+          ...prev,
+          pendingRequests: prev.pendingRequests.filter(req => req.id !== friendshipId)
+        }));
+        if (action === 'ACCEPT') {
+           // Reload friends explicitly
+           const fRes = await fetch('/api/friends');
+           if (fRes.ok) setFriendsData(await fRes.json());
+        }
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  const markNotificationsRead = async () => {
+    try {
+      await fetch('/api/notifications', { method: 'POST' });
+      setNotifications(prev => prev.map(n => ({...n, read: true})));
+    } catch(e) {}
+  };
+
+  const submitSharePins = async () => {
+    if (selectedSharePins.length === 0 || !sharePoiTarget) return;
+    setIsSharingData(true);
+    try {
+       const res = await fetch('/api/friends/share-pins', {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ friendId: sharePoiTarget.id, pinIds: selectedSharePins })
+       });
+       if (res.ok) {
+          const d = await res.json();
+          alert(`Successfully shared ${d.count} places internally!`);
+          setSharePoiTarget(null);
+          setSelectedSharePins([]);
+          setIsFriendsModalOpen(false);
+       } else { 
+          const err = await res.json();
+          alert(`Transmission Failed: ${err.error}`); 
+       }
+    } catch(e) { console.error(e); }
+    setIsSharingData(false);
   };
 
   const handleDeletePin = async (id, e) => {
@@ -591,68 +697,39 @@ export default function Home() {
 
       {/* Map Area */}
       <div style={{ flex: 1, position: 'relative' }}>
-        <MapComponent
+        <MapComponent 
           theme={theme}
           flyToLocation={flyToLocation}
-          isDroppingPin={isDroppingPin}
+          isDroppingPin={isDroppingPin} 
           onMapClick={handleMapClick}
           pendingLocation={pendingLocation}
           pins={filteredPins}
           activePinIndex={activePinIndex}
         />
-
+        
         {/* Top Navbar */}
-        <nav
+        <nav 
           className="glass-panel"
-          style={{
-            position: 'absolute', top: '24px', left: '50%', transform: 'translateX(-50%)',
-            width: '90%', maxWidth: '800px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 24px', borderRadius: '100px', zIndex: 30, gap: '16px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
-          }}
+          style={{ position: 'absolute', top: '24px', left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '900px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderRadius: '100px', zIndex: 30, gap: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}
         >
           <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
             <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
-              <input
-                type="text"
-                placeholder="Search for a city or place..."
-                value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
-                onKeyDown={handleKeyDown}
-                style={{
-                  flex: 1, padding: '12px 20px', borderRadius: '24px',
-                  border: '1px solid var(--surface-border)', outline: 'none',
-                  background: 'var(--surface)', color: 'var(--foreground-dark)'
-                }}
-              />
+              <input type="text" placeholder="Search for a city or place..." value={searchQuery} onChange={e => handleSearch(e.target.value)} onKeyDown={handleKeyDown} style={{ flex: 1, padding: '12px 20px', borderRadius: '24px', border: '1px solid var(--surface-border)', outline: 'none', background: 'var(--surface)', color: 'var(--foreground-dark)' }} />
               <button
                 onClick={executeSearchAndGo}
-                style={{
-                  padding: '10px 24px', borderRadius: '24px', background: 'var(--primary)',
-                  color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600,
-                  transition: 'background 0.2s'
-                }}
+                style={{ padding: '10px 24px', borderRadius: '24px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, transition: 'background 0.2s' }}
               >
                 Go
               </button>
             </div>
-
+            
             {searchResults.length > 0 && (
-              <ul style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px',
-                background: 'var(--surface)', backdropFilter: 'blur(16px)',
-                border: '1px solid var(--surface-border)', borderRadius: '12px',
-                listStyle: 'none', overflow: 'hidden', zIndex: 40,
-                boxShadow: '0 12px 48px rgba(0,0,0,0.2)'
-              }}>
+              <ul style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px', background: 'var(--surface)', backdropFilter: 'blur(16px)', border: '1px solid var(--surface-border)', borderRadius: '12px', listStyle: 'none', overflow: 'hidden', zIndex: 40, boxShadow: '0 12px 48px rgba(0,0,0,0.2)', margin: 0, padding: 0 }}>
                 {searchResults.map((result, idx) => (
-                  <li
-                    key={result.id || idx}
+                  <li 
+                    key={result.id || idx} 
                     onClick={() => selectSearchResult(result)}
-                    style={{
-                      padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--surface-border)',
-                      fontSize: '0.9rem'
-                    }}
+                    style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--surface-border)', fontSize: '0.9rem' }}
                     onMouseOver={(e) => e.currentTarget.style.background = 'var(--surface-border)'}
                     onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                   >
@@ -661,6 +738,105 @@ export default function Home() {
                 ))}
               </ul>
             )}
+          </div>
+
+          {/* Social Center Options */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+
+             {/* Friends Component */}
+             <div style={{ position: 'relative' }}>
+               <button onClick={() => { setIsFriendsModalOpen(!isFriendsModalOpen); setIsNotificationsOpen(false); }} style={{ background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                 👥
+               </button>
+               {isFriendsModalOpen && (
+                 <div style={{ position: 'absolute', top: '120%', right: 0, width: '300px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)' }}>
+                   <div style={{ display: 'flex', borderBottom: '1px solid var(--surface-border)' }}>
+                     <button onClick={() => setActiveFriendTab('friends')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'friends' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>My Friends ({friendsData.friends.length})</button>
+                     <button onClick={() => setActiveFriendTab('add')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'add' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>Add Friend</button>
+                     <button onClick={() => setActiveFriendTab('requests')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'requests' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)', position: 'relative' }}>
+                       Requests {friendsData.pendingRequests.length > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '10px', marginLeft: '4px' }}>{friendsData.pendingRequests.length}</span>}
+                     </button>
+                   </div>
+                   
+                   <div style={{ padding: '16px', maxHeight: '300px', overflowY: 'auto' }}>
+                      {activeFriendTab === 'friends' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {friendsData.friends.length === 0 ? <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: 0, textAlign: 'center' }}>No friends yet!</p> :
+                            friendsData.friends.map(f => (
+                              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--input-bg)', borderRadius: '8px' }}>
+                                 <span style={{ fontWeight: 600 }}>{f.name}</span>
+                                 <button onClick={() => setSharePoiTarget(f)} style={{ padding: '6px 12px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>Share POI</button>
+                              </div>
+                            ))
+                          }
+                        </div>
+                      )}
+
+                      {activeFriendTab === 'add' && (
+                        <div>
+                          <input type="text" placeholder="Search by name..." value={friendSearchQuery} onChange={e => handleFriendSearch(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', outline: 'none' }} />
+                          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {friendSearchResults.map(u => (
+                               <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--input-bg)', borderRadius: '8px' }}>
+                                 <span style={{ fontWeight: 600 }}>{u.name}</span>
+                                 {u.friendshipStatus === 'ACCEPTED' ? (
+                                   <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 600, padding: '4px 8px' }}>Friends</span>
+                                 ) : u.friendshipStatus === 'PENDING' ? (
+                                   <span style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 600, padding: '4px 8px', border: '1px solid #fbbf24', borderRadius: '6px' }}>Pending</span>
+                                 ) : (
+                                   <button onClick={() => handleSendRequest(u.id)} style={{ padding: '6px 12px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Send Request</button>
+                                 )}
+                               </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {activeFriendTab === 'requests' && (
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                           {friendsData.pendingRequests.map(req => (
+                             <div key={req.id} style={{ padding: '12px', background: 'var(--input-bg)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                               <span style={{ fontWeight: 600 }}>{req.requester.name} wants to be friends.</span>
+                               <div style={{ display: 'flex', gap: '8px' }}>
+                                 <button onClick={() => handleFriendRespond(req.id, 'ACCEPT')} style={{ flex: 1, padding: '6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Accept</button>
+                                 <button onClick={() => handleFriendRespond(req.id, 'DECLINE')} style={{ flex: 1, padding: '6px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '6px', cursor: 'pointer' }}>Decline</button>
+                               </div>
+                             </div>
+                           ))}
+                         </div>
+                      )}
+                   </div>
+                 </div>
+               )}
+             </div>
+
+             {/* Notifications Component */}
+             <div style={{ position: 'relative' }}>
+               <button onClick={() => { setIsNotificationsOpen(!isNotificationsOpen); setIsFriendsModalOpen(false); if (!isNotificationsOpen) markNotificationsRead(); }} style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600 }}>
+                 🔔
+                 {notifications.filter(n => !n.read).length > 0 && (
+                   <span style={{ position: 'absolute', bottom: '-4px', left: '-4px', background: '#ef4444', color: 'white', fontSize: '0.65rem', fontWeight: 'bold', minWidth: '18px', height: '18px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface)' }}>
+                     {notifications.filter(n => !n.read).length}
+                   </span>
+                 )}
+               </button>
+               {isNotificationsOpen && (
+                 <div style={{ position: 'absolute', top: '120%', right: 0, width: '280px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)', zIndex: 50 }}>
+                   <div style={{ padding: '16px', fontWeight: 600, borderBottom: '1px solid var(--surface-border)' }}>Your Activity</div>
+                   <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                     {notifications.length === 0 ? <p style={{ padding: '16px', textAlign: 'center', margin: 0, opacity: 0.7, fontSize: '0.85rem' }}>No new notifications.</p> :
+                       notifications.map(n => (
+                         <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--surface-border)', background: n.read ? 'transparent' : 'rgba(59, 130, 246, 0.05)', fontSize: '0.85rem' }}>
+                           {n.message}
+                           <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '4px' }}>{new Date(n.createdAt).toLocaleDateString()}</div>
+                         </div>
+                       ))
+                     }
+                   </div>
+                 </div>
+               )}
+             </div>
+
           </div>
 
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -734,6 +910,53 @@ export default function Home() {
           <div style={{ position: 'absolute', top: '24px', right: '32px', color: 'white', fontSize: '32px', fontWeight: 'bold' }}>✕</div>
         </div>
       )}
+
+      {/* Share POI Modal Popup */}
+      {sharePoiTarget && (
+        <div onClick={() => setSharePoiTarget(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', width: '90%', maxWidth: '500px', borderRadius: '16px', border: '1px solid var(--surface-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ padding: '24px', borderBottom: '1px solid var(--surface-border)', background: 'var(--input-bg)' }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--foreground-dark)' }}>Share Places with {sharePoiTarget.name}</h2>
+              <p style={{ margin: '8px 0 0 0', opacity: 0.7, fontSize: '0.9rem' }}>Select the pins you want to instantly clone into their dashboard!</p>
+            </div>
+            
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+               {pins.length === 0 ? <p style={{ opacity: 0.7, textAlign: 'center' }}>You don't have any places to share yet.</p> :
+                 pins.map(p => {
+                    const isSelected = selectedSharePins.includes(p.id);
+                    return (
+                      <div 
+                        key={p.id} 
+                        onClick={() => setSelectedSharePins(prev => isSelected ? prev.filter(id => id !== p.id) : [...prev, p.id])}
+                        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'var(--input-bg)', borderRadius: '12px', border: isSelected ? `1px solid var(--primary)` : '1px solid var(--surface-border)', cursor: 'pointer', transition: 'all 0.2s' }}
+                      >
+                         <div style={{ width: '20px', height: '20px', borderRadius: '4px', border: isSelected ? 'none' : '1px solid var(--surface-border)', background: isSelected ? 'var(--primary)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
+                            {isSelected && '✓'}
+                         </div>
+                         <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600 }}>{p.title}</div>
+                            <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{p.category.label}</div>
+                         </div>
+                      </div>
+                    )
+                 })
+               }
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--surface-border)', display: 'flex', gap: '12px', justifyContent: 'flex-end', background: 'var(--input-bg)' }}>
+               <button onClick={() => setSharePoiTarget(null)} style={{ padding: '10px 20px', borderRadius: '24px', background: 'transparent', border: '1px solid var(--surface-border)', color: 'var(--foreground-dark)', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+               <button 
+                 onClick={submitSharePins}
+                 disabled={isSharingData || selectedSharePins.length === 0}
+                 style={{ padding: '10px 24px', borderRadius: '24px', background: selectedSharePins.length > 0 ? 'var(--primary)' : 'var(--surface-border)', color: selectedSharePins.length > 0 ? '#fff' : 'var(--foreground-dark)', border: 'none', fontWeight: 600, cursor: selectedSharePins.length > 0 ? 'pointer' : 'not-allowed', opacity: isSharingData ? 0.7 : 1 }}
+               >
+                 {isSharingData ? 'Transferring...' : `Transfer ${selectedSharePins.length} Places`}
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
