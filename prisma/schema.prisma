@@ -29,6 +29,7 @@ model Poi {
   id          String   @id @default(cuid())
   title       String
   description String?
+  address     String?
   rating      Int?
   images      String?
   latitude    Float

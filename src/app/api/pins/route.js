@@ -18,6 +18,7 @@ export async function GET(request) {
       id: p.id,
       title: p.title,
       description: p.description,
+      address: p.address,
       lat: p.latitude,
       lng: p.longitude,
       rating: p.rating,
@@ -42,7 +43,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { title, description, rating, lat, lng, categoryId, images } = body;
+    const { title, description, address, rating, lat, lng, categoryId, images } = body;
 
     if (!title || !lat || !lng || !categoryId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -52,6 +53,7 @@ export async function POST(request) {
       data: {
         title,
         description,
+        address,
         rating,
         latitude: lat,
         longitude: lng,
@@ -66,6 +68,7 @@ export async function POST(request) {
       id: newPin.id,
       title: newPin.title,
       description: newPin.description,
+      address: newPin.address,
       rating: newPin.rating,
       lat: newPin.latitude,
       lng: newPin.longitude,

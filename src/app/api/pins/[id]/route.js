@@ -44,13 +44,14 @@ export async function PATCH(request, { params }) {
     }
 
     const body = await request.json();
-    const { title, description, rating, categoryId, images } = body;
+    const { title, description, address, rating, categoryId, images } = body;
 
     const updatedPin = await prisma.poi.update({
       where: { id },
       data: {
         title: title || undefined,
         description: description !== undefined ? description : undefined,
+        address: address !== undefined ? address : undefined,
         rating: rating !== undefined ? rating : undefined,
         categoryId: categoryId || undefined,
         images: images !== undefined ? (images.length > 0 ? JSON.stringify(images) : null) : undefined
@@ -62,6 +63,7 @@ export async function PATCH(request, { params }) {
       id: updatedPin.id,
       title: updatedPin.title,
       description: updatedPin.description,
+      address: updatedPin.address,
       rating: updatedPin.rating,
       lat: updatedPin.latitude,
       lng: updatedPin.longitude,
