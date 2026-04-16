@@ -216,6 +216,11 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
               <h3 style="margin: 4px 0 6px; font-size: 16px;">${newPin.title}</h3>
               ${newPin.description ? `<p style="margin: 0; font-size: 13px; opacity: 0.8;">${newPin.description.replace(/\n/g, '<br/>')}</p>` : ''}
               ${newPin.rating ? `<p style="margin: 6px 0 0; color: #fbbf24; font-size: 14px;">${'★'.repeat(newPin.rating)}${'☆'.repeat(5-newPin.rating)}</p>` : ''}
+              ${newPin.images && newPin.images.length > 0 ? `
+                <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; max-width: 160px;">
+                  ${newPin.images.map(img => `<img src="${img}" style="width: 32px; height: 32px; object-fit: cover; border-radius: 4px; border: 1px solid var(--surface-border);" />`).join('')}
+                </div>
+              ` : ''}
             </div>
           `);
 

@@ -22,7 +22,8 @@ export async function GET(request) {
       lng: p.longitude,
       rating: p.rating,
       categoryId: p.categoryId,
-      category: p.category
+      category: p.category,
+      images: p.images ? JSON.parse(p.images) : []
     }));
 
     return NextResponse.json(formattedPins);
@@ -41,7 +42,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { title, description, rating, lat, lng, categoryId } = body;
+    const { title, description, rating, lat, lng, categoryId, images } = body;
 
     if (!title || !lat || !lng || !categoryId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -55,7 +56,8 @@ export async function POST(request) {
         latitude: lat,
         longitude: lng,
         userId,
-        categoryId
+        categoryId,
+        images: images && images.length > 0 ? JSON.stringify(images) : null
       },
       include: { category: true }
     });
@@ -69,6 +71,7 @@ export async function POST(request) {
       lng: newPin.longitude,
       categoryId: newPin.categoryId,
       category: newPin.category,
+      images: newPin.images ? JSON.parse(newPin.images) : [],
       created: true // flag helping UI mapping
     };
 

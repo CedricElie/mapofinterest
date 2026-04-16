@@ -12,14 +12,17 @@ model User {
   name      String   @unique
   password  String
   createdAt DateTime @default(now())
-  pois      Poi[]
+  pois       Poi[]
+  categories Category[] @relation("UserCategories")
 }
 
 model Category {
   id    String @id
   label String 
   color String
-  pois  Poi[]
+  userId      String?
+  user        User?    @relation("UserCategories", fields: [userId], references: [id])
+  pois        Poi[]
 }
 
 model Poi {
@@ -27,6 +30,7 @@ model Poi {
   title       String
   description String?
   rating      Int?
+  images      String?
   latitude    Float
   longitude   Float
   

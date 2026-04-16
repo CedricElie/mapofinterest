@@ -3,28 +3,20 @@
 import { useState, useEffect, useRef } from 'react';
 import MapComponent from './MapComponent';
 
-const CATEGORIES = [
-  { id: 'pub', label: 'Pub / Bar', color: '#f59e0b' },
-  { id: 'gas', label: 'Gas Station', color: '#ef4444' },
-  { id: 'school', label: 'School', color: '#3b82f6' },
-  { id: 'hospital', label: 'Hospital', color: '#ec4899' },
-  { id: 'park', label: 'Park / Nature', color: '#10b981' },
-  { id: 'restaurant', label: 'Restaurant', color: '#8b5cf6' },
-  { id: 'cafe', label: 'Cafe / Bakery', color: '#d946ef' },
-  { id: 'museum', label: 'Museum / Art', color: '#0ea5e9' },
-  { id: 'gym', label: 'Gym / Fitness', color: '#f97316' },
-  { id: 'library', label: 'Library', color: '#6366f1' },
-  { id: 'shopping', label: 'Shopping', color: '#14b8a6' },
-  { id: 'viewpoint', label: 'Scenic Viewpoint', color: '#eab308' },
-];
+
 
 export default function Home() {
   const [theme, setTheme] = useState('colored');
   const [isDroppingPin, setIsDroppingPin] = useState(false);
   const [pendingLocation, setPendingLocation] = useState(null);
   const [pins, setPins] = useState([]);
-  const [formData, setFormData] = useState({ title: '', description: '', categoryId: 'pub', rating: 5 });
+  const [categories, setCategories] = useState([]);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryData, setNewCategoryData] = useState({ label: '', color: '#3b82f6' });
+  const [formData, setFormData] = useState({ title: '', description: '', categoryId: 'pub', rating: 5, images: [] });
   const [editingPinId, setEditingPinId] = useState(null);
+  const [enlargedImage, setEnlargedImage] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Geocoding Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,14 +87,21 @@ export default function Home() {
       );
     };
 
-    const loadPins = async () => {
+    const loadConfigs = async () => {
       try {
-        const res = await fetch('/api/pins');
-        if (!res.ok) {
-           if (res.status === 401) window.location.href='/login';
+        const [catRes, pinRes] = await Promise.all([
+          fetch('/api/categories'),
+          fetch('/api/pins')
+        ]);
+        if (!pinRes.ok) {
+           if (pinRes.status === 401) window.location.href='/login';
            return;
         }
-        const data = await res.json();
+        
+        const catData = await catRes.json();
+        setCategories(catData);
+        
+        const data = await pinRes.json();
         setPins(data);
         
         if (data && data.length > 0) {
@@ -117,7 +116,7 @@ export default function Home() {
       }
     };
     
-    loadPins();
+    loadConfigs();
   }, []);
 
   // Geocoding handler with Debounce
@@ -184,14 +183,42 @@ export default function Home() {
   const clearPending = () => {
     setPendingLocation(null);
     setEditingPinId(null);
-    setFormData({ title: '', description: '', categoryId: 'pub', rating: 5 });
+    setFormData({ title: '', description: '', categoryId: 'pub', rating: 5, images: [] });
   };
 
   const handleEditClick = (pin) => {
     setActivePinIndex(null);
     setEditingPinId(pin.id);
     setPendingLocation({ lat: pin.lat, lng: pin.lng });
-    setFormData({ title: pin.title, description: pin.description || '', rating: pin.rating || 5, categoryId: pin.categoryId });
+    setFormData({ title: pin.title, description: pin.description || '', rating: pin.rating || 5, categoryId: pin.categoryId, images: pin.images || [] });
+  };
+
+  const handleFileUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    setIsUploading(true);
+    const formPayload = new FormData();
+    for (const f of files) {
+      formPayload.append('file', f);
+    }
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formPayload
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...data.urls] }));
+      } else {
+         console.error("Upload failed");
+      }
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleDeletePin = async (id, e) => {
@@ -228,7 +255,8 @@ export default function Home() {
           lat: pendingLocation.lat,
           lng: pendingLocation.lng,
           rating: formData.rating,
-          categoryId: formData.categoryId
+          categoryId: formData.categoryId,
+          images: formData.images
         })
       });
       if (res.ok) {
@@ -249,6 +277,29 @@ export default function Home() {
     }
   };
 
+  const handleCreateCategory = async () => {
+    if (!newCategoryData.label) return;
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCategoryData)
+      });
+      if (res.ok) {
+        const appended = await res.json();
+        setCategories(prev => [...prev, appended]);
+        setFormData(prev => ({ ...prev, categoryId: appended.id }));
+        setIsCreatingCategory(false);
+        setNewCategoryData({ label: '', color: '#3b82f6' });
+      } else {
+        const err = await res.json();
+        alert("Failed to create category: " + err.error);
+      }
+    } catch(e) {
+      console.error(e);
+    }
+  };
+
   const filteredPins = pins.filter(p => selectedCategories.length === 0 || selectedCategories.includes(p.categoryId));
 
   return (
@@ -263,18 +314,21 @@ export default function Home() {
           background: 'var(--surface)', backdropFilter: 'blur(32px)'
         }}
       >
-        <div style={{ padding: '24px', borderBottom: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.1)' }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            🌍 POI Explorer
+        <div style={{ padding: '24px', borderBottom: '1px solid var(--surface-border)', background: 'var(--input-bg)' }}>
+          <h1 style={{ 
+            fontSize: '1.8rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px',
+            color: 'var(--primary)', letterSpacing: '-0.5px'
+          }}>
+            <span>✨</span> Places of Interest
           </h1>
-          <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>Discover and share categorized places around the world.</p>
+          <p style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 500, margin: 0 }}>Discover and share your places of interest.</p>
         </div>
 
         {/* Filter Section */}
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--surface-border)' }}>
           <h3 style={{ fontSize: '0.85rem', marginBottom: '12px', fontWeight: 600, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Filter Categories</h3>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-             {CATEGORIES.map(c => {
+             {categories.map(c => {
                const active = selectedCategories.includes(c.id);
                return (
                  <button
@@ -293,6 +347,21 @@ export default function Home() {
                )
              })}
           </div>
+        </div>
+
+        {/* Manage Categories Section */}
+        <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--surface-border)', background: 'var(--input-bg)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: '0.85rem', margin: 0, fontWeight: 600, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Custom Settings</h3>
+            <button onClick={() => setIsCreatingCategory(!isCreatingCategory)} style={{ background: 'transparent', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>{isCreatingCategory ? 'Cancel' : '+ New Category'}</button>
+          </div>
+          {isCreatingCategory && (
+             <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <input type="text" placeholder="e.g. 🏎️ Race Track" value={newCategoryData.label} onChange={e => setNewCategoryData({...newCategoryData, label: e.target.value})} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }} />
+                <input type="color" value={newCategoryData.color} onChange={e => setNewCategoryData({...newCategoryData, color: e.target.value})} style={{ width: '40px', height: '36px', padding: '0', border: 'none', borderRadius: '6px', cursor: 'pointer' }} />
+                <button onClick={handleCreateCategory} disabled={!newCategoryData.label} style={{ padding: '0 12px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+             </div>
+          )}
         </div>
 
         {/* Drop Pin & List */}
@@ -321,7 +390,7 @@ export default function Home() {
                   onChange={e => setFormData({...formData, categoryId: e.target.value})}
                   style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }}
                 >
-                  {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                 </select>
               </label>
 
@@ -345,6 +414,26 @@ export default function Home() {
                   onChange={e => setFormData({...formData, description: e.target.value})}
                   style={{ width: '100%', padding: '8px', borderRadius: '6px', resize: 'none', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }}
                 />
+              </label>
+
+              <label style={{ display: 'block', marginBottom: '16px' }}>
+                <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Photos (optional)</span>
+                <input 
+                  type="file" 
+                  multiple 
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  style={{ width: '100%', padding: '8px', color: 'var(--foreground-dark)', fontSize: '0.8rem' }}
+                />
+                {isUploading && <span style={{ fontSize: '0.8rem', color: '#3b82f6', marginTop: '4px', display: 'block' }}>Uploading...</span>}
+                {formData.images && formData.images.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                     {formData.images.map((img, i) => (
+                       <img key={i} src={img} alt={`Preview ${i}`} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--surface-border)' }} />
+                     ))}
+                  </div>
+                )}
               </label>
 
               <div style={{ marginBottom: '20px', textAlign: 'center' }}>
@@ -425,6 +514,15 @@ export default function Home() {
                          ) : (
                            <p style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)' }}>No description provided.</p>
                          )}
+                         
+                         {p.images && p.images.length > 0 && (
+                           <div style={{ display: 'flex', gap: '8px', marginTop: '12px', overflowX: 'auto', paddingBottom: '6px' }}>
+                             {p.images.map((img, i) => (
+                               <img key={i} src={img} alt="Detail" onClick={(e) => { e.stopPropagation(); setEnlargedImage(img); }} style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px', cursor: 'pointer', border: '1px solid var(--surface-border)', flexShrink: 0 }} />
+                             ))}
+                           </div>
+                         )}
+
                          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
                            <button onClick={(e) => { e.stopPropagation(); handleEditClick(p); }} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid var(--primary)', color: 'var(--primary)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Edit</button>
                            <button onClick={(e) => handleDeletePin(p.id, e)} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Delete</button>
@@ -573,6 +671,17 @@ export default function Home() {
           </div>
         </nav>
       </div>
+
+      {/* Enlarge Image Modal Popup */}
+      {enlargedImage && (
+        <div 
+          onClick={() => setEnlargedImage(null)}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'zoom-out' }}
+        >
+          <img src={enlargedImage} alt="Enlarged" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: '12px', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }} />
+          <div style={{ position: 'absolute', top: '24px', right: '32px', color: 'white', fontSize: '32px', fontWeight: 'bold' }}>✕</div>
+        </div>
+      )}
     </main>
   );
 }
