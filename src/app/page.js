@@ -40,6 +40,11 @@ export default function Home() {
   const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
   const [activePinIndex, setActivePinIndex] = useState(null);
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const friendsRef = useRef(null);
+  const notificationsRef = useRef(null);
+  const mapTypeRef = useRef(null);
 
   const toggleCategoryFilter = (categoryId) => {
     setSelectedCategories(prev =>
@@ -55,6 +60,40 @@ export default function Home() {
     { id: 'colored', label: '🗺️ Colored OSM' },
     { id: 'satellite', label: '🌍 Satellite' }
   ];
+
+  // Handle Responsive Sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024; // Using 1024 for cleaner tablet support
+      setIsMobile(mobile);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Handle click outside for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isFriendsModalOpen && friendsRef.current && !friendsRef.current.contains(event.target)) {
+        setIsFriendsModalOpen(false);
+      }
+      if (isNotificationsOpen && notificationsRef.current && !notificationsRef.current.contains(event.target)) {
+        setIsNotificationsOpen(false);
+      }
+      if (isThemeDropdownOpen && mapTypeRef.current && !mapTypeRef.current.contains(event.target)) {
+        setIsThemeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isFriendsModalOpen, isNotificationsOpen, isThemeDropdownOpen]);
+
+  // Initial Visibility
+  useEffect(() => {
+    if (isMobile) setIsSidebarOpen(false);
+    else setIsSidebarOpen(true);
+  }, [isMobile]);
 
   // Apply theme to DOM
   useEffect(() => {
@@ -205,6 +244,8 @@ export default function Home() {
     if (isDroppingPin) {
       setPendingLocation(lngLat);
       setIsDroppingPin(false);
+      // Auto-reopen sidebar on mobile to show the form
+      if (isMobile) setIsSidebarOpen(true);
     }
   };
 
@@ -212,6 +253,8 @@ export default function Home() {
     setPendingLocation(null);
     setEditingPinId(null);
     setFormData({ title: '', description: '', address: '', categoryId: 'pub', rating: 5, images: [] });
+    // Auto-close sidebar on mobile to show the result on the map
+    if (isMobile) setIsSidebarOpen(false);
   };
 
   const handleEditClick = (pin) => {
@@ -412,18 +455,32 @@ export default function Home() {
   const customCategories = categories.filter(c => c.userId !== null);
 
   return (
-    <main style={{ display: 'flex', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+    <main style={{ display: 'flex', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
 
       {/* Sidebar - Fixed to left */}
       <aside
         className="glass-panel"
         style={{
-          width: '380px', flexShrink: 0, height: '100vh', display: 'flex', flexDirection: 'column',
-          borderRight: '1px solid var(--surface-border)', zIndex: 20, position: 'relative',
-          background: 'var(--surface)', backdropFilter: 'blur(32px)'
+          width: isSidebarOpen ? (isMobile ? '100%' : '380px') : '0',
+          opacity: isSidebarOpen ? 1 : 0,
+          visibility: isSidebarOpen ? 'visible' : 'hidden',
+          flexShrink: 0, 
+          height: '100dvh', 
+          display: 'flex', 
+          flexDirection: 'column',
+          borderRight: isSidebarOpen ? '1px solid var(--surface-border)' : 'none', 
+          zIndex: 100, 
+          position: isMobile ? 'absolute' : 'relative',
+          background: 'var(--surface)', 
+          backdropFilter: 'blur(32px)',
+          transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          overflow: 'hidden'
         }}
       >
-        <div style={{ padding: '24px', borderBottom: '1px solid var(--surface-border)', background: 'var(--input-bg)' }}>
+        <div style={{ padding: '24px', borderBottom: '1px solid var(--surface-border)', background: 'var(--input-bg)', position: 'relative' }}>
+          {isMobile && isSidebarOpen && (
+             <button onClick={() => setIsSidebarOpen(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'transparent', border: 'none', color: 'var(--foreground-dark)', fontSize: '1.2rem', cursor: 'pointer', zIndex: 10 }}>✕</button>
+          )}
           <h1 style={{
             fontSize: '1.8rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px',
             color: 'var(--primary)', letterSpacing: '-0.5px'
@@ -439,7 +496,12 @@ export default function Home() {
           {/* Top-Most: Drop Pin Action */}
           {!pendingLocation ? (
             <button
-              onClick={() => setIsDroppingPin(!isDroppingPin)}
+              onClick={() => {
+                const nextState = !isDroppingPin;
+                setIsDroppingPin(nextState);
+                // Auto-hide sidebar on mobile when entering drop mode
+                if (isMobile && nextState) setIsSidebarOpen(false);
+              }}
               style={{
                 width: '100%', padding: '16px', background: isDroppingPin ? '#ef4444' : 'var(--primary)',
                 color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer',
@@ -644,7 +706,7 @@ export default function Home() {
                         {activePinIndex === idx && (
                           <div style={{ fontSize: '0.9rem', marginTop: '12px', padding: '12px', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
                             {p.description ? (
-                              <div style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)' }} dangerouslySetInnerHTML={{ __html: p.description.replace(/\n/g, '<br/>') }} />
+                              <div style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)', whiteSpace: 'pre-wrap' }}>{p.description}</div>
                             ) : (
                               <p style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)' }}>No description provided.</p>
                             )}
@@ -656,11 +718,15 @@ export default function Home() {
                                   title="Copy Address"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    navigator.clipboard.writeText(p.address);
-                                    const btn = e.currentTarget;
-                                    const original = btn.innerHTML;
-                                    btn.innerHTML = '✅';
-                                    setTimeout(() => btn.innerHTML = original, 1500);
+                                    if (navigator.clipboard) {
+                                      navigator.clipboard.writeText(p.address);
+                                      const btn = e.currentTarget;
+                                      const original = btn.innerHTML;
+                                      btn.innerHTML = '✅';
+                                      setTimeout(() => btn.innerHTML = original, 1500);
+                                    } else {
+                                      alert("Copying is blocked on insecure connections. Please use HTTPS or localhost to enable this feature.");
+                                    }
                                   }}
                                   style={{ flexShrink: 0, padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s', fontSize: '1.2rem', marginLeft: '8px' }}
                                   onMouseOver={e => e.currentTarget.style.opacity = 1}
@@ -693,6 +759,20 @@ export default function Home() {
             </>
           )}
         </div>
+
+        {isMobile && (
+          <div style={{ padding: '24px', borderTop: '1px solid var(--surface-border)', background: 'var(--input-bg)', display: 'flex', flexDirection: 'column' }}>
+            <button
+              onClick={async () => {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+              }}
+              style={{ padding: '12px', borderRadius: '12px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Logout
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Map Area */}
@@ -706,22 +786,83 @@ export default function Home() {
           pins={filteredPins}
           activePinIndex={activePinIndex}
         />
+
+        {/* Floating Mobile Map Type Selector */}
+        {isMobile && (
+          <div ref={mapTypeRef} style={{ position: 'absolute', bottom: '48px', left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {isThemeDropdownOpen && (
+              <div style={{
+                marginBottom: '12px', background: 'rgba(var(--surface-rgb), 0.95)', backdropFilter: 'blur(24px)',
+                border: '1px solid var(--surface-border)', borderRadius: '16px',
+                overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', width: '160px'
+              }}>
+                {THEMES.map(t => (
+                  <div
+                    key={t.id}
+                    onClick={() => { setTheme(t.id); setIsThemeDropdownOpen(false); }}
+                    style={{
+                      padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--surface-border)',
+                      fontSize: '0.9rem', color: theme === t.id ? 'var(--primary)' : 'var(--foreground-dark)',
+                      background: theme === t.id ? 'rgba(0,0,0,0.05)' : 'transparent', textAlign: 'center'
+                    }}
+                  >
+                    {t.label}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setIsThemeDropdownOpen(!isThemeDropdownOpen)}
+              className="glass-panel"
+              style={{
+                padding: '10px 20px', borderRadius: '24px', background: 'rgba(var(--surface-rgb), 0.9)',
+                color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)', cursor: 'pointer', fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', minWidth: '130px', justifyContent: 'center',
+                backdropFilter: 'blur(16px)'
+              }}
+            >
+              <span style={{ fontSize: '0.85rem' }}>{THEMES.find(t => t.id === theme)?.label || 'Map Type'}</span>
+            </button>
+          </div>
+        )}
         
         {/* Top Navbar */}
         <nav 
           className="glass-panel"
-          style={{ position: 'absolute', top: '24px', left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '900px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px', borderRadius: '100px', zIndex: 30, gap: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}
+          style={{ 
+            position: 'absolute', top: '24px', left: '50%', transform: 'translateX(-50%)', 
+            width: isMobile ? 'calc(100% - 32px)' : '90%', maxWidth: '900px', 
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+            padding: isMobile ? '8px 16px' : '12px 24px', borderRadius: '100px', 
+            zIndex: 30, gap: isMobile ? '8px' : '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' 
+          }}
         >
-          <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-            <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
-              <input type="text" placeholder="Search for a city or place..." value={searchQuery} onChange={e => handleSearch(e.target.value)} onKeyDown={handleKeyDown} style={{ flex: 1, padding: '12px 20px', borderRadius: '24px', border: '1px solid var(--surface-border)', outline: 'none', background: 'var(--surface)', color: 'var(--foreground-dark)' }} />
-              <button
-                onClick={executeSearchAndGo}
-                style={{ padding: '10px 24px', borderRadius: '24px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, transition: 'background 0.2s' }}
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '12px', flex: 1, maxWidth: isMobile ? '55%' : '400px' }}>
+            {(!isSidebarOpen || isMobile) && (
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                style={{ 
+                  background: 'var(--surface)', border: '1px solid var(--surface-border)', 
+                  width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                  color: 'var(--foreground-dark)', fontSize: '1.2rem', flexShrink: 0 
+                }}
               >
-                Go
+                ☰
               </button>
-            </div>
+            )}
+            <div style={{ position: 'relative', flex: 1 }}>
+              <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
+                <input type="text" placeholder={isMobile ? "Search..." : "Search for a city or place..."} value={searchQuery} onChange={e => handleSearch(e.target.value)} onKeyDown={handleKeyDown} style={{ flex: 1, padding: isMobile ? '10px 16px' : '12px 20px', borderRadius: '24px', border: '1px solid var(--surface-border)', outline: 'none', background: 'var(--surface)', color: 'var(--foreground-dark)', fontSize: isMobile ? '0.9rem' : '1rem' }} />
+                {!isMobile && (
+                  <button
+                    onClick={executeSearchAndGo}
+                    style={{ padding: '10px 24px', borderRadius: '24px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, transition: 'background 0.2s' }}
+                  >
+                    Go
+                  </button>
+                )}
+              </div>
             
             {searchResults.length > 0 && (
               <ul style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px', background: 'var(--surface)', backdropFilter: 'blur(16px)', border: '1px solid var(--surface-border)', borderRadius: '12px', listStyle: 'none', overflow: 'hidden', zIndex: 40, boxShadow: '0 12px 48px rgba(0,0,0,0.2)', margin: 0, padding: 0 }}>
@@ -739,23 +880,30 @@ export default function Home() {
               </ul>
             )}
           </div>
+        </div>
 
           {/* Social Center Options */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '12px' : '24px' }}>
 
              {/* Friends Component */}
-             <div style={{ position: 'relative' }}>
-               <button onClick={() => { setIsFriendsModalOpen(!isFriendsModalOpen); setIsNotificationsOpen(false); }} style={{ background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+             <div ref={friendsRef} style={{ position: 'relative' }}>
+               <button onClick={() => { setIsFriendsModalOpen(!isFriendsModalOpen); setIsNotificationsOpen(false); }} style={{ background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: isMobile ? '8px 10px' : '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                  👥
                </button>
                {isFriendsModalOpen && (
-                 <div style={{ position: 'absolute', top: '120%', right: 0, width: '300px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)' }}>
-                   <div style={{ display: 'flex', borderBottom: '1px solid var(--surface-border)' }}>
-                     <button onClick={() => setActiveFriendTab('friends')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'friends' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>My Friends ({friendsData.friends.length})</button>
-                     <button onClick={() => setActiveFriendTab('add')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'add' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>Add Friend</button>
-                     <button onClick={() => setActiveFriendTab('requests')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'requests' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)', position: 'relative' }}>
-                       Requests {friendsData.pendingRequests.length > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '10px', marginLeft: '4px' }}>{friendsData.pendingRequests.length}</span>}
-                     </button>
+                 <div style={{ position: 'absolute', top: '120%', right: 0, width: '300px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)', zIndex: 110 }}>
+                   <div style={{ position: 'relative' }}>
+                     <button 
+                       onClick={() => setIsFriendsModalOpen(false)}
+                       style={{ position: 'absolute', top: '8px', right: '8px', background: 'transparent', border: 'none', color: 'var(--foreground-dark)', cursor: 'pointer', opacity: 0.5, zIndex: 10 }}
+                     >✕</button>
+                     <div style={{ display: 'flex', borderBottom: '1px solid var(--surface-border)' }}>
+                       <button onClick={() => setActiveFriendTab('friends')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'friends' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>Friends ({friendsData.friends.length})</button>
+                       <button onClick={() => setActiveFriendTab('add')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'add' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>Add</button>
+                       <button onClick={() => setActiveFriendTab('requests')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'requests' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)', position: 'relative' }}>
+                         Req {friendsData.pendingRequests.length > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '10px', marginLeft: '4px' }}>{friendsData.pendingRequests.length}</span>}
+                       </button>
+                     </div>
                    </div>
                    
                    <div style={{ padding: '16px', maxHeight: '300px', overflowY: 'auto' }}>
@@ -811,8 +959,8 @@ export default function Home() {
              </div>
 
              {/* Notifications Component */}
-             <div style={{ position: 'relative' }}>
-               <button onClick={() => { setIsNotificationsOpen(!isNotificationsOpen); setIsFriendsModalOpen(false); if (!isNotificationsOpen) markNotificationsRead(); }} style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600 }}>
+             <div ref={notificationsRef} style={{ position: 'relative' }}>
+               <button onClick={() => { setIsNotificationsOpen(!isNotificationsOpen); setIsFriendsModalOpen(false); if (!isNotificationsOpen) markNotificationsRead(); }} style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: isMobile ? '8px 10px' : '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600, flexShrink: 0 }}>
                  🔔
                  {notifications.filter(n => !n.read).length > 0 && (
                    <span style={{ position: 'absolute', bottom: '-4px', left: '-4px', background: '#ef4444', color: 'white', fontSize: '0.65rem', fontWeight: 'bold', minWidth: '18px', height: '18px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface)' }}>
@@ -821,8 +969,11 @@ export default function Home() {
                  )}
                </button>
                {isNotificationsOpen && (
-                 <div style={{ position: 'absolute', top: '120%', right: 0, width: '280px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)', zIndex: 50 }}>
-                   <div style={{ padding: '16px', fontWeight: 600, borderBottom: '1px solid var(--surface-border)' }}>Your Activity</div>
+                 <div style={{ position: 'absolute', top: '120%', right: 0, width: isMobile ? '240px' : '280px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)', zIndex: 110 }}>
+                   <div style={{ padding: '16px', fontWeight: 600, borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <span>Your Activity</span>
+                     <button onClick={() => setIsNotificationsOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--foreground-dark)', cursor: 'pointer', opacity: 0.5 }}>✕</button>
+                   </div>
                    <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                      {notifications.length === 0 ? <p style={{ padding: '16px', textAlign: 'center', margin: 0, opacity: 0.7, fontSize: '0.85rem' }}>No new notifications.</p> :
                        notifications.map(n => (
@@ -837,9 +988,9 @@ export default function Home() {
                )}
              </div>
 
-          </div>
+           </div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
+           <div style={{ display: isMobile ? 'none' : 'flex', gap: '12px' }}>
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => setIsThemeDropdownOpen(!isThemeDropdownOpen)}

@@ -4,6 +4,18 @@ import { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
+// Safe escaping for HTML injection prevention
+const escapeHTML = (str) => {
+  if (!str) return '';
+  return str.replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[m]);
+};
+
 const getMapLibreStyle = (theme) => {
   if (theme === 'satellite') {
     return {
@@ -140,7 +152,11 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
   // Handle Theme switching
   useEffect(() => {
     if (!map.current) return;
-    map.current.setStyle(getMapLibreStyle(theme));
+    try {
+      map.current.setStyle(getMapLibreStyle(theme), { diff: false });
+    } catch (err) {
+      console.warn('Map style update failed, retrying on next frame:', err);
+    }
   }, [theme]);
 
   // Handle Searching / Fly To Location
@@ -199,10 +215,10 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
         el.innerHTML = `
           <div style="background: var(--surface); padding: 6px 10px; border-radius: 8px; font-family: sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid var(--surface-border); display: flex; flex-direction: column; align-items: center; margin-bottom: 4px; pointer-events: none;">
             <div style="font-size: 9px; font-weight: 800; text-transform: uppercase; color: ${newPin.category?.color || '#fff'}; letter-spacing: 0.5px;">
-              ${newPin.category?.label || 'Pin'}
+              ${escapeHTML(newPin.category?.label || 'Pin')}
             </div>
             <div style="font-weight: 600; font-size: 12px; color: var(--foreground-dark); white-space: nowrap;">
-              ${newPin.title}
+              ${escapeHTML(newPin.title)}
             </div>
             ${starsHTML}
           </div>
@@ -212,9 +228,9 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
         const popup = new maplibregl.Popup({ offset: 35, className: 'dark-popup' })
           .setHTML(`
             <div style="padding: 4px; min-width: 140px;">
-              <p style="margin: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: ${newPin.category?.color};">${newPin.category?.label}</p>
-              <h3 style="margin: 4px 0 6px; font-size: 16px;">${newPin.title}</h3>
-              ${newPin.description ? `<p style="margin: 0; font-size: 13px; opacity: 0.8;">${newPin.description.replace(/\n/g, '<br/>')}</p>` : ''}
+              <p style="margin: 0; font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: ${newPin.category?.color};">${escapeHTML(newPin.category?.label)}</p>
+              <h3 style="margin: 4px 0 6px; font-size: 16px;">${escapeHTML(newPin.title)}</h3>
+              ${newPin.description ? `<p style="margin: 0; font-size: 13px; opacity: 0.8;">${escapeHTML(newPin.description).replace(/\n/g, '<br/>')}</p>` : ''}
               ${newPin.rating ? `<p style="margin: 6px 0 0; color: #fbbf24; font-size: 14px;">${'★'.repeat(newPin.rating)}${'☆'.repeat(5-newPin.rating)}</p>` : ''}
               ${newPin.images && newPin.images.length > 0 ? `
                 <div style="display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; max-width: 160px;">

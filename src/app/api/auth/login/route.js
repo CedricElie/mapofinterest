@@ -18,13 +18,17 @@ export async function POST(request) {
     }
 
     const response = NextResponse.json({ success: true, user: { id: user.id, name: user.name } });
-    
+
+    // Enable insecure cookies for dev network access (mobile devices)
+    const isProd = process.env.NODE_ENV === 'production';
+
     response.cookies.set({
       name: 'auth',
       value: user.id,
       httpOnly: true,
       path: '/',
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProd,
+      sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7 // 1 week
     });
 

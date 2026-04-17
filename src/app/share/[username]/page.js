@@ -114,11 +114,22 @@ export default function SharedMap() {
                   
                   {activePinIndex === idx && (
                     <div style={{ fontSize: '0.9rem', marginTop: '12px', padding: '12px', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
-                       {p.description ? <div style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)' }} dangerouslySetInnerHTML={{ __html: p.description.replace(/\n/g, '<br/>') }} /> : <p style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)' }}>No description.</p>}
+                       {p.description ? <div style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)', whiteSpace: 'pre-wrap' }}>{p.description}</div> : <p style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)' }}>No description.</p>}
                        {p.address && (
                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', padding: '8px 12px', background: 'rgba(0,0,0,0.05)', borderRadius: '6px', border: '1px solid var(--surface-border)' }}>
                            <span style={{ fontSize: '0.85rem', color: 'var(--foreground-dark)', opacity: 0.9, flex: 1, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.address}</span>
-                           <button onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(p.address); const btn = e.currentTarget; const original = btn.innerHTML; btn.innerHTML = '✅'; setTimeout(() => btn.innerHTML = original, 1500); }} style={{ flexShrink: 0, padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7, fontSize: '1.2rem', marginLeft: '8px' }}>📋</button>
+                           <button onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (navigator.clipboard) {
+                                navigator.clipboard.writeText(p.address); 
+                                const btn = e.currentTarget; 
+                                const original = btn.innerHTML; 
+                                btn.innerHTML = '✅'; 
+                                setTimeout(() => btn.innerHTML = original, 1500); 
+                              } else {
+                                alert("Copying is blocked on insecure connections.");
+                              }
+                            }} style={{ flexShrink: 0, padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7, fontSize: '1.2rem', marginLeft: '8px' }}>📋</button>
                          </div>
                        )}
                        {p.images && p.images.length > 0 && (
