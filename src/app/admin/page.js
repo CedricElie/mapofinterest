@@ -123,31 +123,31 @@ export default function AdminDashboard() {
             {detailLoading && <p style={{ textAlign: 'center', padding: '20px' }}>Loading details...</p>}
             
             {selectedUser && (
-              <div>
-                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>User: {selectedUser.name}</h2>
-                <p style={{ color: '#4b5563', marginBottom: '24px' }}>Member since: {new Date(selectedUser.createdAt).toLocaleDateString()}</p>
+              <div style={{ color: '#000' }}>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px', fontWeight: '800' }}>User: {selectedUser.name}</h2>
+                <p style={{ color: '#111', marginBottom: '24px', fontWeight: '500' }}>Member since: {new Date(selectedUser.createdAt).toLocaleDateString()}</p>
                 
                 <div style={{ marginBottom: '24px' }}>
-                  <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>Friends ({selectedUser.friends.length})</h3>
-                  {selectedUser.friends.length === 0 ? <p style={{ fontSize: '0.9rem', color: '#666' }}>No friends yet.</p> : (
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', borderBottom: '1px solid #ddd', paddingBottom: '8px', fontWeight: '700' }}>Friends ({selectedUser.friends.length})</h3>
+                  {selectedUser.friends.length === 0 ? <p style={{ fontSize: '0.9rem', color: '#333' }}>No friends yet.</p> : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                       {selectedUser.friends.map(f => (
-                        <span key={f.id} style={{ background: '#f3f4f6', padding: '4px 10px', borderRadius: '20px', fontSize: '0.85rem' }}>{f.name}</span>
+                        <span key={f.id} style={{ background: '#e5e7eb', color: '#000', padding: '4px 10px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' }}>{f.name}</span>
                       ))}
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>Saved Places ({selectedUser.pois.length})</h3>
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', borderBottom: '1px solid #ddd', paddingBottom: '8px', fontWeight: '700' }}>Saved Places ({selectedUser.pois.length})</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {selectedUser.pois.length === 0 ? <p style={{ fontSize: '0.9rem', color: '#666' }}>No places saved.</p> : selectedUser.pois.map(p => (
-                      <div key={p.id} style={{ padding: '10px', border: '1px solid #f3f4f6', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    {selectedUser.pois.length === 0 ? <p style={{ fontSize: '0.9rem', color: '#333' }}>No places saved.</p> : selectedUser.pois.map(p => (
+                      <div key={p.id} style={{ padding: '10px', border: '1px solid #e5e7eb', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb' }}>
                         <div>
-                          <p style={{ fontWeight: '600', margin: 0 }}>{p.title}</p>
-                          <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>{p.category.label}</p>
+                          <p style={{ fontWeight: '700', margin: 0, color: '#000' }}>{p.title}</p>
+                          <p style={{ fontSize: '0.85rem', color: '#111', margin: 0, fontWeight: '500' }}>{p.category.label}</p>
                         </div>
-                        <span style={{ fontSize: '0.8rem', color: '#999' }}>{new Date(p.createdAt).toLocaleDateString()}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: '600' }}>{new Date(p.createdAt).toLocaleDateString()}</span>
                       </div>
                     ))}
                   </div>
@@ -156,31 +156,31 @@ export default function AdminDashboard() {
             )}
 
             {selectedPoi && (
-              <div>
-                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Place: {selectedPoi.title}</h2>
-                <p style={{ color: '#4b5563', marginBottom: '16px' }}>Author: {selectedPoi.user?.name} ({selectedPoi.user?.email || 'No email'})</p>
+              <div style={{ color: '#000' }}>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px', fontWeight: '800' }}>Place: {selectedPoi.title}</h2>
+                <p style={{ color: '#111', marginBottom: '16px', fontWeight: '600' }}>Author: {selectedPoi.user?.name} ({selectedPoi.user?.email || 'No email'})</p>
                 
                 <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
-                  <span style={{ background: selectedPoi.category.color + '22', color: selectedPoi.category.color, padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' }}>{selectedPoi.category.label}</span>
-                  <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' }}>⭐ {selectedPoi.rating || 0} / 5</span>
+                  <span style={{ background: selectedPoi.category.color + '33', color: selectedPoi.category.color, padding: '6px 14px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: '800', border: `1px solid ${selectedPoi.category.color}` }}>{selectedPoi.category.label}</span>
+                  <span style={{ background: '#fffbeb', color: '#92400e', padding: '6px 14px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: '800', border: '1px solid #fde68a' }}>⭐ {selectedPoi.rating || 0} / 5</span>
                 </div>
 
-                <div style={{ marginBottom: '20px' }}>
-                  <p style={{ fontWeight: '600', marginBottom: '4px' }}>Address</p>
-                  <p style={{ fontSize: '0.95rem', margin: 0 }}>{selectedPoi.address || 'No address provided'}</p>
+                <div style={{ marginBottom: '20px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
+                  <p style={{ fontWeight: '800', marginBottom: '4px', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', color: '#4b5563' }}>Address</p>
+                  <p style={{ fontSize: '1rem', margin: 0, color: '#000', fontWeight: '500' }}>{selectedPoi.address || 'No address provided'}</p>
                 </div>
 
-                <div style={{ marginBottom: '20px' }}>
-                  <p style={{ fontWeight: '600', marginBottom: '4px' }}>Description</p>
-                  <p style={{ fontSize: '0.95rem', margin: 0, whiteSpace: 'pre-wrap' }}>{selectedPoi.description || 'No description provided'}</p>
+                <div style={{ marginBottom: '20px', padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
+                  <p style={{ fontWeight: '800', marginBottom: '4px', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', color: '#4b5563' }}>Description</p>
+                  <p style={{ fontSize: '1rem', margin: 0, color: '#000', fontWeight: '500', whiteSpace: 'pre-wrap' }}>{selectedPoi.description || 'No description provided'}</p>
                 </div>
 
                 {selectedPoi.images && JSON.parse(selectedPoi.images).length > 0 && (
                   <div>
-                    <p style={{ fontWeight: '600', marginBottom: '8px' }}>Images</p>
+                    <p style={{ fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em', color: '#4b5563' }}>Images</p>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px' }}>
                       {JSON.parse(selectedPoi.images).map((img, idx) => (
-                        <img key={idx} src={img} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #eee' }} />
+                        <img key={idx} src={img} style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '12px', border: '2px solid #f3f4f6' }} />
                       ))}
                     </div>
                   </div>
@@ -233,7 +233,7 @@ export default function AdminDashboard() {
             </div>
             <div style={{ maxHeight: '500px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: '#111' }}>
-                <thead style={{ position: 'sticky', top: 0, background: '#f9fafb', zIndex: 1 }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#f9fafb', zIndex: 1, color: '#000', fontWeight: '800' }}>
                   <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
                     <th style={{ padding: '12px' }}>Name</th>
                     <th style={{ padding: '12px' }}>Role</th>
@@ -247,7 +247,7 @@ export default function AdminDashboard() {
                     <tr onClick={() => viewUserDetails(u.id)} key={u.id} style={{ borderBottom: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.1s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                       <td style={{ padding: '16px 12px', fontWeight: '500' }}>{u.name}</td>
                       <td style={{ padding: '16px 12px' }}><span style={{ padding: '4px 8px', background: u.role==='ADMIN'?'#fef08a':'#f3f4f6', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '600' }}>{u.role}</span></td>
-                      <td style={{ padding: '16px 12px', fontSize: '0.9rem', color: '#4b5563' }}>{u._count.pois} POIs, {u._count.comments} Comments</td>
+                      <td style={{ padding: '16px 12px', fontSize: '0.95rem', color: '#000', fontWeight: '500' }}>{u._count.pois} POIs, {u._count.comments} Comments</td>
                       <td style={{ padding: '16px 12px' }}>
                         {u.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
                       </td>
@@ -293,8 +293,8 @@ export default function AdminDashboard() {
                   {pois.map(p => (
                     <tr onClick={() => viewPoiDetails(p.id)} key={p.id} style={{ borderBottom: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.1s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                       <td style={{ padding: '16px 12px', fontWeight: '500' }}>{p.title}</td>
-                      <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.user?.name}</td>
-                      <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.latitude.toFixed(4)}, {p.longitude.toFixed(4)}</td>
+                      <td style={{ padding: '16px 12px', color: '#111', fontSize: '0.95rem', fontWeight: '500' }}>{p.user?.name}</td>
+                      <td style={{ padding: '16px 12px', color: '#111', fontSize: '0.95rem', fontWeight: '500' }}>{p.latitude.toFixed(4)}, {p.longitude.toFixed(4)}</td>
                       <td style={{ padding: '16px 12px' }}>
                         {p.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
                       </td>
