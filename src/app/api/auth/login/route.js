@@ -17,7 +17,11 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    const response = NextResponse.json({ success: true, user: { id: user.id, name: user.name } });
+    if (user.disabled) {
+      return NextResponse.json({ error: 'Your account has been disabled by an administrator' }, { status: 403 });
+    }
+
+    const response = NextResponse.json({ success: true, user: { id: user.id, name: user.name, role: user.role } });
 
     // Enable insecure cookies for dev network access (mobile devices)
     const isProd = process.env.NODE_ENV === 'production';

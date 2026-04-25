@@ -20,6 +20,9 @@ model User {
   bio       String?
   avatar    String?
 
+  role      String   @default("USER")
+  disabled  Boolean  @default(false)
+
   createdAt DateTime @default(now())
   pois       Poi[]
   categories       Category[] @relation("UserCategories")
@@ -55,6 +58,7 @@ model Poi {
   
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
+  disabled    Boolean  @default(false)
   createdAt   DateTime @default(now())
 
   @@unique([userId, sharedPoiId])

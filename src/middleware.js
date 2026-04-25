@@ -4,7 +4,7 @@ export function middleware(request) {
   const authCookie = request.cookies.get('auth');
   const { pathname } = request.nextUrl;
 
-  if (!authCookie && pathname === '/') {
+  if (!authCookie && (pathname === '/' || pathname.startsWith('/admin'))) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
@@ -16,5 +16,5 @@ export function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/login'],
+  matcher: ['/', '/login', '/admin/:path*'],
 };

@@ -45,3 +45,6 @@ next-env.d.ts
 # AI Configuration
 CLAUDE.md
 AGENTS.md
+
+# Public uploads
+/public/uploads/

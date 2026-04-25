@@ -10,7 +10,7 @@ export async function GET(request) {
 
   try {
     const pins = await prisma.poi.findMany({
-      where: { userId },
+      where: { userId, disabled: false },
       include: { category: true, user: true }
     });
     

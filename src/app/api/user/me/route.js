@@ -10,11 +10,15 @@ export async function GET(request) {
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true }
+      select: { id: true, name: true, role: true, disabled: true }
     });
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    if (user.disabled) {
+      return NextResponse.json({ error: 'Account disabled' }, { status: 403 });
     }
 
     return NextResponse.json(user);
