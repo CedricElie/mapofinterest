@@ -1,0 +1,1429 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import MapComponent from './MapComponent';
+
+function PinComments({ sharedPoiId }) {
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/comments?sharedPoiId=${sharedPoiId}`)
+      .then(res => res.json())
+      .then(data => { setComments(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [sharedPoiId]);
+
+  const postComment = async (e) => {
+    e.stopPropagation();
+    if (!text) return;
+    const res = await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sharedPoiId, text })
+    });
+    if (res.ok) {
+      const newC = await res.json();
+      setComments([newC, ...comments]);
+      setText('');
+    }
+  };
+
+  if (loading) return <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '16px' }}>Loading comments...</div>;
+
+  return (
+    <div style={{ marginTop: '16px', borderTop: '1px solid var(--surface-border)', paddingTop: '12px' }} onClick={e => e.stopPropagation()}>
+      <h4 style={{ fontSize: '0.85rem', margin: '0 0 8px 0', opacity: 0.8 }}>Comments</h4>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+        <input value={text} onChange={e => setText(e.target.value)} placeholder="Add a comment..." style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', fontSize: '0.8rem' }} />
+        <button onClick={postComment} disabled={!text} style={{ padding: '0 12px', borderRadius: '6px', background: text ? 'var(--primary)' : 'transparent', color: text ? '#fff' : 'var(--foreground-dark)', border: text ? 'none' : '1px solid var(--surface-border)', fontSize: '0.8rem', fontWeight: 600 }}>Post</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }} className="custom-scrollbar">
+        {comments.length === 0 ? <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>No comments yet.</p> :
+          comments.map(c => (
+            <div key={c.id} style={{ padding: '8px', background: 'rgba(0,0,0,0.02)', borderRadius: '6px', border: '1px solid var(--surface-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{c.user.name}</span>
+                <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>{new Date(c.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+              </div>
+              <div style={{ fontSize: '0.8rem' }}>{c.text}</div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+
+
+export default function Home() {
+  const [theme, setTheme] = useState('colored');
+  const [isDroppingPin, setIsDroppingPin] = useState(false);
+  const [pendingLocation, setPendingLocation] = useState(null);
+  const [pins, setPins] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryData, setNewCategoryData] = useState({ label: '', color: '#3b82f6' });
+  const [formData, setFormData] = useState({ title: '', description: '', address: '', categoryId: 'pub', rating: 5, images: [] });
+  const [editingPinId, setEditingPinId] = useState(null);
+  const [enlargedImage, setEnlargedImage] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // Social Graph States
+  const [currentUser, setCurrentUser] = useState(null);
+  const [friendsData, setFriendsData] = useState({ pendingRequests: [], friends: [] });
+  const [notifications, setNotifications] = useState([]);
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [friendSearchQuery, setFriendSearchQuery] = useState('');
+  const [friendSearchResults, setFriendSearchResults] = useState([]);
+  const [activeFriendTab, setActiveFriendTab] = useState('friends'); // 'friends', 'add', 'requests'
+  const [sharePoiTarget, setSharePoiTarget] = useState(null);
+  const [selectedSharePins, setSelectedSharePins] = useState([]);
+  const [isSharingData, setIsSharingData] = useState(false);
+
+  // Geocoding Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [flyToLocation, setFlyToLocation] = useState(null);
+  const searchTimeoutRef = useRef(null);
+
+  const [isThemeDropdownOpen, setIsThemeDropdownOpen] = useState(false);
+  const [activePinIndex, setActivePinIndex] = useState(null);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const friendsRef = useRef(null);
+  const notificationsRef = useRef(null);
+  const mapTypeRef = useRef(null);
+
+  const toggleCategoryFilter = (categoryId) => {
+    setSelectedCategories(prev =>
+      prev.includes(categoryId)
+        ? prev.filter(id => id !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const THEMES = [
+    { id: 'dark', label: '🌙 Dark Mode' },
+    { id: 'light', label: '☀️ Light Mode' },
+    { id: 'colored', label: '🗺️ Colored OSM' },
+    { id: 'transport', label: '🚌 Transport Map' },
+    { id: 'satellite', label: '🌍 Satellite' }
+  ];
+
+  // Routing State
+  const [isRoutingMode, setIsRoutingMode] = useState(false);
+  const [routingStep, setRoutingStep] = useState('START'); // 'START', 'END', 'RESULT'
+  const [routePoints, setRoutePoints] = useState([]); // [{lat, lng}, {lat, lng}]
+  const [routeData, setRouteData] = useState(null);
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [routeDistance, setRouteDistance] = useState(null);
+  const [routeDuration, setRouteDuration] = useState(null);
+  const [startQuery, setStartQuery] = useState('');
+  const [startSuggestions, setStartSuggestions] = useState([]);
+  const [isGPSLoading, setIsGPSLoading] = useState(false);
+
+  // Handle Responsive Sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 1024; // Using 1024 for cleaner tablet support
+      setIsMobile(mobile);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Handle click outside for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isFriendsModalOpen && friendsRef.current && !friendsRef.current.contains(event.target)) {
+        setIsFriendsModalOpen(false);
+      }
+      if (isNotificationsOpen && notificationsRef.current && !notificationsRef.current.contains(event.target)) {
+        setIsNotificationsOpen(false);
+      }
+      if (isThemeDropdownOpen && mapTypeRef.current && !mapTypeRef.current.contains(event.target)) {
+        setIsThemeDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isFriendsModalOpen, isNotificationsOpen, isThemeDropdownOpen]);
+
+  // Initial Visibility
+  useEffect(() => {
+    if (isMobile) setIsSidebarOpen(false);
+    else setIsSidebarOpen(true);
+  }, [isMobile]);
+
+  // Apply theme to DOM
+  useEffect(() => {
+    if (theme === 'light' || theme === 'colored' || theme === 'transport') {
+      document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }, [theme]);
+
+  // Load Pins and Initial Centering
+  useEffect(() => {
+    const locateUser = async () => {
+      const fallbackToIP = async () => {
+        try {
+          const res = await fetch('https://ipapi.co/json/');
+          const data = await res.json();
+          if (data && data.latitude && data.longitude) {
+            setFlyToLocation({ lat: data.latitude, lng: data.longitude });
+          }
+        } catch (e) {
+          console.error("IP Geolocate error:", e);
+        }
+      };
+
+      if (!('geolocation' in navigator)) {
+        fallbackToIP();
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setFlyToLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn("GPS Geolocation error or denied:", error);
+          fallbackToIP();
+        },
+        { timeout: 5000, maximumAge: 60000 }
+      );
+    };
+
+    const loadConfigs = async () => {
+      try {
+        const [userRes, catRes, pinRes, friendsRes, notifRes] = await Promise.all([
+          fetch('/api/user/me'),
+          fetch('/api/categories'),
+          fetch('/api/pins'),
+          fetch('/api/friends'),
+          fetch('/api/notifications')
+        ]);
+        if (!pinRes.ok) {
+           if (pinRes.status === 401) window.location.href='/login';
+           return;
+        }
+        
+        const userData = await userRes.json();
+        setCurrentUser(userData);
+
+        const catData = await catRes.json();
+        setCategories(catData);
+        
+        const data = await pinRes.json();
+        setPins(data);
+
+        if (friendsRes.ok) {
+          const fData = await friendsRes.json();
+          setFriendsData(fData);
+        }
+        if (notifRes.ok) {
+          const nData = await notifRes.json();
+          setNotifications(nData.notifications);
+        }
+
+        if (data && data.length > 0) {
+          const lastPin = data[data.length - 1];
+          setFlyToLocation({ lat: lastPin.lat, lng: lastPin.lng });
+        } else {
+          locateUser();
+        }
+      } catch (e) {
+        console.error(e);
+        locateUser();
+      }
+    };
+
+    loadConfigs();
+  }, []);
+
+  // Geocoding handler with Debounce
+  const handleSearch = (val) => {
+    setSearchQuery(val);
+
+    if (val.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        if (data && data.results) {
+          setSearchResults(data.results);
+        } else {
+          setSearchResults([]);
+        }
+      } catch (e) {
+        console.error("Search error:", e);
+      }
+    }, 500);
+  };
+
+  const selectSearchResult = (result) => {
+    setFlyToLocation({ lat: result.latitude, lng: result.longitude });
+    setSearchQuery(`${result.name}${result.country ? ', ' + result.country : ''}`);
+    setSearchResults([]);
+  };
+
+  const executeSearchAndGo = async () => {
+    if (!searchQuery || searchQuery.length < 2) return;
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
+      const data = await res.json();
+      if (data && data.results && data.results.length > 0) {
+        selectSearchResult(data.results[0]);
+      }
+    } catch (e) {
+      console.error("Execute search error:", e);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      executeSearchAndGo();
+    }
+  };
+
+  const handleMapClick = (lngLat) => {
+    setActivePinIndex(null);
+    
+    // Handle Routing Mode point selection
+    if (isRoutingMode) {
+      if (routingStep === 'START') {
+        setRoutePoints([lngLat]);
+        setRoutingStep('END');
+      } 
+      // Destination must be a pin, handled via pin list or marker click (future)
+      return;
+    }
+
+    if (isDroppingPin) {
+      setPendingLocation(lngLat);
+      setIsDroppingPin(false);
+      // Auto-reopen sidebar on mobile to show the form
+      if (isMobile) setIsSidebarOpen(true);
+    }
+  };
+
+  const calculateRoute = async (start, end) => {
+    setIsCalculatingRoute(true);
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (data.code === 'Ok') {
+        setRouteData(data.routes[0]);
+        setRouteDistance(data.routes[0].distance);
+        setRouteDuration(data.routes[0].duration);
+        setRoutingStep('RESULT');
+      } else {
+        alert('Could not find a route between these points.');
+      }
+    } catch (e) {
+      console.error('Routing error:', e);
+      alert('Routing service is currently unavailable.');
+    }
+    setIsCalculatingRoute(false);
+  };
+
+  const handleGPSStart = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsGPSLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lngLat = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+        setRoutePoints([lngLat]);
+        setFlyToLocation(lngLat);
+        setRoutingStep('END');
+        setIsGPSLoading(false);
+      },
+      (err) => {
+        alert("Unable to retrieve your location: " + err.message);
+        setIsGPSLoading(false);
+      }
+    );
+  };
+
+  const searchStartAddres = async (q) => {
+    setStartQuery(q);
+    if (q.length < 3) { setStartSuggestions([]); return; }
+    try {
+       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`);
+       const data = await res.json();
+       setStartSuggestions(data);
+    } catch(e) {}
+  };
+
+  const selectStartSuggestion = (s) => {
+    const lngLat = { lng: parseFloat(s.lon), lat: parseFloat(s.lat) };
+    setRoutePoints([lngLat]);
+    setFlyToLocation(lngLat);
+    setStartSuggestions([]);
+    setStartQuery(s.display_name);
+    setRoutingStep('END');
+  };
+
+  const selectDestinationPin = (pin) => {
+    if (routePoints.length === 0) return;
+    const endPoint = { lat: pin.lat, lng: pin.lng };
+    const newPoints = [routePoints[0], endPoint];
+    setRoutePoints(newPoints);
+    calculateRoute(newPoints[0], newPoints[1]);
+  };
+
+  const clearRoute = () => {
+    setRoutePoints([]);
+    setRouteData(null);
+    setRouteDistance(null);
+    setRouteDuration(null);
+    setIsRoutingMode(false);
+    setRoutingStep('START');
+    setStartQuery('');
+    setStartSuggestions([]);
+  };
+
+  const clearPending = () => {
+    setPendingLocation(null);
+    setEditingPinId(null);
+    setFormData({ title: '', description: '', address: '', categoryId: 'pub', rating: 5, images: [] });
+    // Auto-close sidebar on mobile to show the result on the map
+    if (isMobile) setIsSidebarOpen(false);
+  };
+
+  const handleEditClick = (pin) => {
+    setActivePinIndex(null);
+    setEditingPinId(pin.id);
+    setPendingLocation({ lat: pin.lat, lng: pin.lng });
+    setFormData({ title: pin.title, description: pin.description || '', address: pin.address || '', rating: pin.rating || 5, categoryId: pin.categoryId, images: pin.images || [] });
+  };
+
+  const handleFileUpload = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const formPayload = new FormData();
+    for (const f of files) {
+      formPayload.append('file', f);
+    }
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formPayload
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...data.urls] }));
+      } else {
+        console.error("Upload failed");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Social Methods
+  const handleFriendSearch = async (val) => {
+    setFriendSearchQuery(val);
+    if (val.length < 2) { setFriendSearchResults([]); return; }
+    try {
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(val)}`);
+      const data = await res.json();
+      setFriendSearchResults(data);
+    } catch(e) { console.error(e); }
+  };
+
+  const handleSendRequest = async (addresseeId) => {
+    try {
+      const res = await fetch('/api/friends/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ addresseeId })
+      });
+      if (res.ok) {
+        setFriendSearchResults(prev => prev.map(u => u.id === addresseeId ? { ...u, friendshipStatus: 'PENDING', isSender: true } : u));
+      } else { 
+        const d = await res.json(); 
+        alert(d.error); 
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  const handleFriendRespond = async (friendshipId, action) => {
+    try {
+      const res = await fetch('/api/friends/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ friendshipId, action })
+      });
+      if (res.ok) {
+        setFriendsData(prev => ({
+          ...prev,
+          pendingRequests: prev.pendingRequests.filter(req => req.id !== friendshipId)
+        }));
+        if (action === 'ACCEPT') {
+           // Reload friends explicitly
+           const fRes = await fetch('/api/friends');
+           if (fRes.ok) setFriendsData(await fRes.json());
+        }
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  const markNotificationsRead = async () => {
+    try {
+      await fetch('/api/notifications', { method: 'POST' });
+      setNotifications(prev => prev.map(n => ({...n, read: true})));
+    } catch(e) {}
+  };
+
+  const submitSharePins = async () => {
+    if (selectedSharePins.length === 0 || !sharePoiTarget) return;
+    setIsSharingData(true);
+    try {
+       const res = await fetch('/api/friends/share-pins', {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ friendId: sharePoiTarget.id, pinIds: selectedSharePins })
+       });
+       if (res.ok) {
+          const d = await res.json();
+          alert(`Successfully shared ${d.count} places internally!`);
+          setSharePoiTarget(null);
+          setSelectedSharePins([]);
+          setIsFriendsModalOpen(false);
+       } else { 
+          const err = await res.json();
+          alert(`Transmission Failed: ${err.error}`); 
+       }
+    } catch(e) { console.error(e); }
+    setIsSharingData(false);
+  };
+
+  const handleDeletePin = async (id, e) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this place?')) return;
+
+    try {
+      const res = await fetch(`/api/pins/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setPins(prev => prev.filter(p => p.id !== id));
+        if (editingPinId === id) clearPending();
+      } else {
+        const err = await res.json();
+        alert("Failed to delete processing: " + err.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to delete place. Check console.");
+    }
+  };
+
+  const handleSavePin = async () => {
+    if (!formData.title) return;
+    try {
+      const url = editingPinId ? `/api/pins/${editingPinId}` : '/api/pins';
+      const method = editingPinId ? 'PATCH' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          address: formData.address,
+          lat: pendingLocation.lat,
+          lng: pendingLocation.lng,
+          rating: formData.rating,
+          categoryId: formData.categoryId,
+          images: formData.images
+        })
+      });
+      if (res.ok) {
+        const savedPin = await res.json();
+        if (editingPinId) {
+          setPins(prev => prev.map(p => p.id === editingPinId ? savedPin : p));
+        } else {
+          setPins(prev => [...prev, savedPin]);
+        }
+        clearPending();
+      } else {
+        const err = await res.json();
+        alert("Failed to save: " + (err.error || "Please run `npx prisma db push` to update the database schema."));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Failed to save pin. Check console.");
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategoryData.label) return;
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCategoryData)
+      });
+      if (res.ok) {
+        const appended = await res.json();
+        setCategories(prev => [...prev, appended]);
+        setFormData(prev => ({ ...prev, categoryId: appended.id }));
+        setIsCreatingCategory(false);
+        setNewCategoryData({ label: '', color: '#3b82f6' });
+      } else {
+        const err = await res.json();
+        alert("Failed to create category: " + err.error);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const filteredPins = pins.filter(p => selectedCategories.length === 0 || selectedCategories.includes(p.categoryId));
+  const nativeCategories = categories.filter(c => c.userId === null);
+  const customCategories = categories.filter(c => c.userId !== null);
+
+  return (
+    <main style={{ display: 'flex', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
+
+      {/* Sidebar - Fixed to left */}
+      <aside
+        className="glass-panel"
+        style={{
+          width: isSidebarOpen ? (isMobile ? '100%' : '380px') : '0',
+          opacity: isSidebarOpen ? 1 : 0,
+          visibility: isSidebarOpen ? 'visible' : 'hidden',
+          flexShrink: 0, 
+          height: '100dvh', 
+          display: 'flex', 
+          flexDirection: 'column',
+          borderRight: isSidebarOpen ? '1px solid var(--surface-border)' : 'none', 
+          zIndex: 100, 
+          position: isMobile ? 'absolute' : 'relative',
+          background: 'var(--surface)', 
+          backdropFilter: 'blur(32px)',
+          transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          overflow: 'hidden'
+        }}
+      >
+        <div style={{ padding: '24px', borderBottom: '1px solid var(--surface-border)', background: 'var(--input-bg)', position: 'relative' }}>
+          {isMobile && isSidebarOpen && (
+             <button onClick={() => setIsSidebarOpen(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'transparent', border: 'none', color: 'var(--foreground-dark)', fontSize: '1.2rem', cursor: 'pointer', zIndex: 10 }}>✕</button>
+          )}
+          <h1 style={{
+            fontSize: '1.8rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px',
+            color: 'var(--primary)', letterSpacing: '-0.5px'
+          }}>
+            <span>✨</span> Places of Interest
+          </h1>
+          {currentUser && (
+            <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '6px' }}>
+              Hello, {currentUser.name}! 👋
+            </p>
+          )}
+          <p style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 500, margin: 0 }}>Discover and share your places of interest.</p>
+        </div>
+
+        {/* Sidebar Body */}
+        <div style={{ padding: '24px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+          {/* Top-Most: Drop Pin Action */}
+          {!pendingLocation ? (
+            <button
+              onClick={() => {
+                const nextState = !isDroppingPin;
+                setIsDroppingPin(nextState);
+                // Auto-hide sidebar on mobile when entering drop mode
+                if (isMobile && nextState) setIsSidebarOpen(false);
+              }}
+              style={{
+                width: '100%', padding: '16px', background: isDroppingPin ? '#ef4444' : 'var(--primary)',
+                color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer',
+                fontWeight: '700', transition: 'background 0.2s', fontSize: '1.05rem',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}
+            >
+              {isDroppingPin ? 'Cancel Pin Placement' : '📍 DROP NEW PIN'}
+            </button>
+          ) : (
+            <div style={{ background: 'var(--input-bg)', padding: '16px', borderRadius: '12px', border: '1px solid var(--surface-border)' }}>
+              <h3 style={{ fontSize: '1rem', marginBottom: '12px' }}>{editingPinId ? 'Update Place' : 'Save New Place'}</h3>
+
+              <label style={{ display: 'block', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Category</span>
+                <select
+                  value={formData.categoryId}
+                  onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }}
+                >
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              </label>
+
+              <label style={{ display: 'block', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Title</span>
+                <input
+                  type="text"
+                  placeholder="Name of this place"
+                  value={formData.title}
+                  onChange={e => setFormData({ ...formData, title: e.target.value })}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }}
+                />
+              </label>
+
+              <label style={{ display: 'block', marginBottom: '12px' }}>
+                <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Address (optional)</span>
+                <input
+                  type="text"
+                  placeholder="Street, City, Zip"
+                  value={formData.address}
+                  onChange={e => setFormData({ ...formData, address: e.target.value })}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }}
+                />
+              </label>
+
+              <label style={{ display: 'block', marginBottom: '16px' }}>
+                <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Description (optional)</span>
+                <textarea
+                  rows={2}
+                  placeholder="What's interesting about it?"
+                  value={formData.description}
+                  onChange={e => setFormData({ ...formData, description: e.target.value })}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', resize: 'none', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }}
+                />
+              </label>
+
+              <label style={{ display: 'block', marginBottom: '16px' }}>
+                <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '4px' }}>Photos (optional)</span>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                  style={{ width: '100%', padding: '8px', color: 'var(--foreground-dark)', fontSize: '0.8rem' }}
+                />
+                {isUploading && <span style={{ fontSize: '0.8rem', color: '#3b82f6', marginTop: '4px', display: 'block' }}>Uploading...</span>}
+                {formData.images && formData.images.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                    {formData.images.map((img, i) => (
+                      <img key={i} src={img} alt={`Preview ${i}`} style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--surface-border)' }} />
+                    ))}
+                  </div>
+                )}
+              </label>
+
+              <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.8rem', opacity: 0.8, display: 'block', marginBottom: '8px' }}>Your Rating</span>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span
+                      key={star}
+                      onClick={() => setFormData({ ...formData, rating: star })}
+                      style={{
+                        cursor: 'pointer',
+                        fontSize: '1.5rem',
+                        lineHeight: 1,
+                        color: formData.rating >= star ? '#fbbf24' : 'var(--surface-border)',
+                        transition: 'color 0.2s'
+                      }}
+                    >
+                      ★
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  disabled={!formData.title}
+                  onClick={handleSavePin}
+                  style={{ flex: 1, padding: '10px', background: formData.title ? 'var(--primary)' : 'rgba(0,0,0,0.2)', color: 'white', border: 'none', borderRadius: '8px', cursor: formData.title ? 'pointer' : 'not-allowed', fontWeight: '600' }}
+                >
+                  {editingPinId ? '✏️ Update' : 'Save'}
+                </button>
+                <button
+                  onClick={clearPending}
+                  style={{ flex: 1, padding: '10px', background: 'transparent', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Conditional Layout Switching: Elements hide when editing */}
+          {!pendingLocation && (
+            <>
+              {/* Native Filter Section */}
+              <div>
+                <h3 style={{ fontSize: '0.85rem', marginBottom: '12px', fontWeight: 600, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Categories</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {nativeCategories.map(c => {
+                    const active = selectedCategories.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => toggleCategoryFilter(c.id)}
+                        style={{ padding: '6px 12px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 600, background: active ? c.color : 'transparent', color: active ? '#fff' : 'var(--foreground-dark)', border: `1px solid ${active ? c.color : 'var(--surface-border)'}`, cursor: 'pointer', transition: 'all 0.2s' }}
+                      >{c.label}</button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Filter Section */}
+              <div style={{ padding: '20px 0', borderTop: '1px solid var(--surface-border)', borderBottom: '1px solid var(--surface-border)' }}>
+                <h3 style={{ fontSize: '0.85rem', marginBottom: '12px', fontWeight: 600, opacity: 0.8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Custom Categories</h3>
+
+                {customCategories.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+                    {customCategories.map(c => {
+                      const active = selectedCategories.includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          onClick={() => toggleCategoryFilter(c.id)}
+                          style={{ padding: '6px 12px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 600, background: active ? c.color : 'transparent', color: active ? '#fff' : 'var(--foreground-dark)', border: `1px solid ${active ? c.color : 'var(--surface-border)'}`, cursor: 'pointer', transition: 'all 0.2s' }}
+                        >{c.label}</button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {isCreatingCategory ? (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                    <input type="text" placeholder="e.g. 🏎️ Race Track" value={newCategoryData.label} onChange={e => setNewCategoryData({ ...newCategoryData, label: e.target.value })} style={{ flex: 1, padding: '8px', borderRadius: '6px', background: 'var(--surface)', color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)' }} />
+                    <input type="color" value={newCategoryData.color} onChange={e => setNewCategoryData({ ...newCategoryData, color: e.target.value })} style={{ width: '40px', height: '36px', padding: '0', border: 'none', borderRadius: '6px', cursor: 'pointer' }} />
+                    <button onClick={handleCreateCategory} disabled={!newCategoryData.label} style={{ padding: '0 12px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Add</button>
+                    <button onClick={() => setIsCreatingCategory(false)} style={{ padding: '0 12px', background: 'transparent', color: 'var(--foreground-dark)', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setIsCreatingCategory(true)} style={{ padding: '8px 16px', background: 'transparent', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, width: '100%' }}>
+                    + NEW CATEGORY
+                  </button>
+                )}
+              </div>
+
+              {filteredPins.length > 0 && (
+                <div>
+                  <h3 style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600 }}>
+                    Saved Places ({filteredPins.length})
+                  </h3>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {filteredPins.map((p, idx) => (
+                      <li
+                        key={p.id || idx}
+                        onClick={() => setActivePinIndex(activePinIndex === idx ? null : idx)}
+                        style={{
+                          background: activePinIndex === idx ? 'rgba(99, 102, 241, 0.15)' : 'var(--input-bg)',
+                          padding: '12px 16px', borderRadius: '12px', borderLeft: `4px solid ${p.category?.color}`,
+                          cursor: 'pointer', transition: 'all 0.2s', border: activePinIndex === idx ? `1px solid ${p.category?.color}` : '1px solid var(--surface-border)',
+                          boxShadow: activePinIndex === idx ? '0 4px 12px rgba(0,0,0,0.05)' : 'none'
+                        }}
+                        onMouseOver={(e) => {
+                          if (activePinIndex !== idx) e.currentTarget.style.background = 'var(--surface-border)';
+                        }}
+                        onMouseOut={(e) => {
+                          if (activePinIndex !== idx) e.currentTarget.style.background = 'var(--input-bg)';
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ fontWeight: '600', fontSize: '1rem' }}>{p.title}</div>
+                          {p.rating && (
+                            <div style={{ color: '#fbbf24', fontSize: '0.9rem', letterSpacing: '-1px' }}>
+                              {'★'.repeat(p.rating)}{'☆'.repeat(5 - p.rating)}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: '2px', color: p.category?.color || '#a1a1aa' }}>{p.category?.label}</div>
+                        <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>👤 {p.creatorName || 'Unknown'}</span>
+                          {p.createdAt && <span>{new Date(p.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                        </div>
+                        {activePinIndex === idx && (
+                          <div style={{ fontSize: '0.9rem', marginTop: '12px', padding: '12px', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
+                            {p.description ? (
+                              <div style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)', whiteSpace: 'pre-wrap' }}>{p.description}</div>
+                            ) : (
+                              <p style={{ margin: 0, opacity: 1, color: 'var(--foreground-dark)' }}>No description provided.</p>
+                            )}
+
+                            {p.address && (
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px', padding: '8px 12px', background: 'rgba(0,0,0,0.05)', borderRadius: '6px', border: '1px solid var(--surface-border)' }}>
+                                <span style={{ fontSize: '0.85rem', color: 'var(--foreground-dark)', opacity: 0.9, flex: 1, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.address}</span>
+                                <button
+                                  title="Copy Address"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (navigator.clipboard) {
+                                      navigator.clipboard.writeText(p.address);
+                                      const btn = e.currentTarget;
+                                      const original = btn.innerHTML;
+                                      btn.innerHTML = '✅';
+                                      setTimeout(() => btn.innerHTML = original, 1500);
+                                    } else {
+                                      alert("Copying is blocked on insecure connections. Please use HTTPS or localhost to enable this feature.");
+                                    }
+                                  }}
+                                  style={{ flexShrink: 0, padding: '4px', background: 'transparent', border: 'none', cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s', fontSize: '1.2rem', marginLeft: '8px' }}
+                                  onMouseOver={e => e.currentTarget.style.opacity = 1}
+                                  onMouseOut={e => e.currentTarget.style.opacity = 0.7}
+                                >
+                                  📋
+                                </button>
+                              </div>
+                            )}
+
+                            {p.images && p.images.length > 0 && (
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '12px', overflowX: 'auto', paddingBottom: '6px' }}>
+                                {p.images.map((img, i) => (
+                                  <img key={i} src={img} alt="Detail" onClick={(e) => { e.stopPropagation(); setEnlargedImage(img); }} style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '8px', cursor: 'pointer', border: '1px solid var(--surface-border)', flexShrink: 0 }} />
+                                ))}
+                              </div>
+                            )}
+
+                            {(!p.creatorName || p.creatorName === currentUser?.name) && (
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                                <button onClick={(e) => { e.stopPropagation(); handleEditClick(p); }} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid var(--primary)', color: 'var(--primary)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                                <button onClick={(e) => handleDeletePin(p.id, e)} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Delete</button>
+                              </div>
+                            )}
+
+                            <PinComments sharedPoiId={p.sharedPoiId} />
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {isMobile && (
+          <div style={{ padding: '24px', borderTop: '1px solid var(--surface-border)', background: 'var(--input-bg)', display: 'flex', flexDirection: 'column' }}>
+            <button
+              onClick={async () => {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+              }}
+              style={{ padding: '12px', borderRadius: '12px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Logout
+            </button>
+          </div>
+        )}
+      </aside>
+
+      {/* Map Area */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <MapComponent 
+          theme={theme}
+          flyToLocation={flyToLocation}
+          isDroppingPin={isDroppingPin} 
+          onMapClick={handleMapClick}
+          pendingLocation={pendingLocation}
+          pins={filteredPins}
+          activePinIndex={activePinIndex}
+          routeData={routeData}
+          onPinSelect={(pin) => {
+            if (isRoutingMode && routingStep === 'END') {
+              selectDestinationPin(pin);
+            }
+          }}
+        />
+
+        {/* Directions / Routing HUD */}
+        {(isRoutingMode || routeData) && (
+          <div style={{ position: 'absolute', top: '90px', left: '50%', transform: 'translateX(-50%)', zIndex: 60, width: '90%', maxWidth: '450px' }}>
+            <div className="glass-panel" style={{ background: 'var(--surface)', padding: '20px', borderRadius: '20px', border: '1px solid var(--surface-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>🚗</span>
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Route Planner</h3>
+                 </div>
+                 <button onClick={clearRoute} style={{ background: 'transparent', border: 'none', color: 'var(--foreground-dark)', opacity: 0.5, fontWeight: 600, cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+              </div>
+
+              {/* STEP 1: START SELECTION */}
+              {routingStep === 'START' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                   <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, opacity: 0.8 }}>Step 1: Where are you starting from?</p>
+                   
+                   <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={handleGPSStart} 
+                        disabled={isGPSLoading}
+                        style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 600 }}
+                      >
+                         {isGPSLoading ? 'Locating...' : '📍 My Location'}
+                      </button>
+                      <div style={{ position: 'relative', flex: 2 }}>
+                         <input 
+                           type="text" 
+                           placeholder="Type an address..." 
+                           value={startQuery}
+                           onChange={(e) => searchStartAddres(e.target.value)}
+                           style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', outline: 'none' }}
+                         />
+                         {startSuggestions.length > 0 && (
+                           <div style={{ position: 'absolute', top: '110%', left: 0, width: '100%', background: 'var(--surface)', borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden', zIndex: 70, border: '1px solid var(--surface-border)' }}>
+                              {startSuggestions.map((s, i) => (
+                                <div key={i} onClick={() => selectStartSuggestion(s)} style={{ padding: '10px 14px', fontSize: '0.85rem', cursor: 'pointer', borderBottom: i === startSuggestions.length - 1 ? 'none' : '1px solid var(--surface-border)', color: 'var(--foreground-dark)' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                                  {s.display_name}
+                                </div>
+                              ))}
+                           </div>
+                         )}
+                      </div>
+                   </div>
+                   <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.6, textAlign: 'center' }}>- OR - Click anywhere on the map to set a custom start point.</p>
+                </div>
+              )}
+
+              {/* STEP 2: END SELECTION */}
+              {routingStep === 'END' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, opacity: 0.8 }}>Step 2: Choose your saved destination</p>
+                      <button onClick={() => setRoutingStep('START')} style={{ fontSize: '0.8rem', color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Back</button>
+                   </div>
+                   
+                   <p style={{ margin: '4px 0', fontSize: '0.8rem', opacity: 0.6 }}>Click a marker on the map or select from your list below:</p>
+                   
+                   <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }} className="custom-scrollbar">
+                      {pins.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', opacity: 0.5, fontSize: '0.85rem' }}>No saved places found.</p>
+                      ) : (
+                        pins.map(p => (
+                          <div 
+                            key={p.id} 
+                            onClick={() => selectDestinationPin(p)}
+                            style={{ padding: '12px', background: 'var(--input-bg)', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid var(--surface-border)', transition: 'all 0.2s' }}
+                            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--surface-border)'}
+                          >
+                             <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.title}</span>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>{p.address || 'No address'}</span>
+                             </div>
+                             <span style={{ fontSize: '1.2rem' }}>🏁</span>
+                          </div>
+                        ))
+                      )}
+                   </div>
+                </div>
+              )}
+
+              {/* STEP 3: RESULT */}
+              {routingStep === 'RESULT' && routeData && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary)' }}>Route Calculated!</p>
+                      <button onClick={() => setRoutingStep('START')} style={{ fontSize: '0.85rem', color: 'var(--foreground-dark)', opacity: 0.6, background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Restart</button>
+                   </div>
+
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--input-bg)', padding: '16px', borderRadius: '16px', border: '1px solid var(--surface-border)' }}>
+                      <div style={{ display: 'flex', gap: '24px' }}>
+                         <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Distance</span>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800 }}>{(routeDistance / 1000).toFixed(1)} km</span>
+                         </div>
+                         <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Est. Time</span>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800 }}>{Math.round(routeDuration / 60)} min</span>
+                         </div>
+                      </div>
+                      <button onClick={() => window.open(`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${routePoints[0].lat}%2C${routePoints[0].lng}%3B${routePoints[1].lat}%2C${routePoints[1].lng}`, '_blank')} style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>GO</button>
+                   </div>
+                </div>
+              )}
+              
+              {isCalculatingRoute && <div style={{ fontSize: '0.85rem', color: 'var(--primary)', textAlign: 'center', fontWeight: 600, animation: 'pulse 1.5s infinite' }}>Analyzing road network...</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Floating Mobile Map Type Selector */}
+        {isMobile && (
+          <div ref={mapTypeRef} style={{ position: 'absolute', bottom: '48px', left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {isThemeDropdownOpen && (
+              <div style={{
+                marginBottom: '12px', background: 'rgba(var(--surface-rgb), 0.95)', backdropFilter: 'blur(24px)',
+                border: '1px solid var(--surface-border)', borderRadius: '16px',
+                overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', width: '160px'
+              }}>
+                {THEMES.map(t => (
+                  <div
+                    key={t.id}
+                    onClick={() => { setTheme(t.id); setIsThemeDropdownOpen(false); }}
+                    style={{
+                      padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--surface-border)',
+                      fontSize: '0.9rem', color: theme === t.id ? 'var(--primary)' : 'var(--foreground-dark)',
+                      background: theme === t.id ? 'rgba(0,0,0,0.05)' : 'transparent', textAlign: 'center'
+                    }}
+                  >
+                    {t.label}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => setIsThemeDropdownOpen(!isThemeDropdownOpen)}
+              className="glass-panel"
+              style={{
+                padding: '10px 20px', borderRadius: '24px', background: 'rgba(var(--surface-rgb), 0.9)',
+                color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)', cursor: 'pointer', fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', minWidth: '130px', justifyContent: 'center',
+                backdropFilter: 'blur(16px)'
+              }}
+            >
+              <span style={{ fontSize: '0.85rem' }}>{THEMES.find(t => t.id === theme)?.label || 'Map Type'}</span>
+            </button>
+          </div>
+        )}
+        
+        {/* Top Navbar */}
+        <nav 
+          className="glass-panel"
+          style={{ 
+            position: 'absolute', top: '24px', left: '50%', transform: 'translateX(-50%)', 
+            width: isMobile ? 'calc(100% - 32px)' : '90%', maxWidth: '900px', 
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+            padding: isMobile ? '8px 16px' : '12px 24px', borderRadius: '100px', 
+            zIndex: 30, gap: isMobile ? '8px' : '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' 
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '12px', flex: 1, maxWidth: isMobile ? '55%' : '400px' }}>
+            {(!isSidebarOpen || isMobile) && (
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                style={{ 
+                  background: 'var(--surface)', border: '1px solid var(--surface-border)', 
+                  width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer', 
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                  color: 'var(--foreground-dark)', fontSize: '1.2rem', flexShrink: 0 
+                }}
+              >
+                ☰
+              </button>
+            )}
+            <div style={{ position: 'relative', flex: 1 }}>
+              <div style={{ display: 'flex', width: '100%', gap: '8px' }}>
+                <input type="text" placeholder={isMobile ? "Search..." : "Search for a city or place..."} value={searchQuery} onChange={e => handleSearch(e.target.value)} onKeyDown={handleKeyDown} style={{ flex: 1, padding: isMobile ? '10px 16px' : '12px 20px', borderRadius: '24px', border: '1px solid var(--surface-border)', outline: 'none', background: 'var(--surface)', color: 'var(--foreground-dark)', fontSize: isMobile ? '0.9rem' : '1rem' }} />
+                {!isMobile && (
+                  <button
+                    onClick={executeSearchAndGo}
+                    style={{ padding: '10px 24px', borderRadius: '24px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, transition: 'background 0.2s' }}
+                  >
+                    Go
+                  </button>
+                )}
+              </div>
+            
+            {searchResults.length > 0 && (
+              <ul style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '8px', background: 'var(--surface)', backdropFilter: 'blur(16px)', border: '1px solid var(--surface-border)', borderRadius: '12px', listStyle: 'none', overflow: 'hidden', zIndex: 40, boxShadow: '0 12px 48px rgba(0,0,0,0.2)', margin: 0, padding: 0 }}>
+                {searchResults.map((result, idx) => (
+                  <li 
+                    key={result.id || idx} 
+                    onClick={() => selectSearchResult(result)}
+                    style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--surface-border)', fontSize: '0.9rem' }}
+                    onMouseOver={(e) => e.currentTarget.style.background = 'var(--surface-border)'}
+                    onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    {result.name}{result.admin1 ? `, ${result.admin1}` : ''}{result.country ? `, ${result.country}` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+          {/* Social Center Options */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '12px' : '24px' }}>
+
+             {/* Friends Component */}
+             <div ref={friendsRef} style={{ position: 'relative' }}>
+               <button onClick={() => { setIsFriendsModalOpen(!isFriendsModalOpen); setIsNotificationsOpen(false); }} style={{ background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: isMobile ? '8px 10px' : '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                 👥
+               </button>
+               {isFriendsModalOpen && (
+                 <div style={{ position: 'absolute', top: '120%', right: 0, width: '300px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)', zIndex: 110 }}>
+                   <div style={{ position: 'relative' }}>
+                     <button 
+                       onClick={() => setIsFriendsModalOpen(false)}
+                       style={{ position: 'absolute', top: '8px', right: '8px', background: 'transparent', border: 'none', color: 'var(--foreground-dark)', cursor: 'pointer', opacity: 0.5, zIndex: 10 }}
+                     >✕</button>
+                     <div style={{ display: 'flex', borderBottom: '1px solid var(--surface-border)' }}>
+                       <button onClick={() => setActiveFriendTab('friends')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'friends' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>Friends ({friendsData.friends.length})</button>
+                       <button onClick={() => setActiveFriendTab('add')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'add' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)' }}>Add</button>
+                       <button onClick={() => setActiveFriendTab('requests')} style={{ flex: 1, padding: '12px', border: 'none', background: activeFriendTab === 'requests' ? 'var(--input-bg)' : 'transparent', fontWeight: 600, cursor: 'pointer', color: 'var(--foreground-dark)', position: 'relative' }}>
+                         Req {friendsData.pendingRequests.length > 0 && <span style={{ background: '#ef4444', color: 'white', fontSize: '0.6rem', padding: '2px 6px', borderRadius: '10px', marginLeft: '4px' }}>{friendsData.pendingRequests.length}</span>}
+                       </button>
+                     </div>
+                   </div>
+                   
+                   <div style={{ padding: '16px', maxHeight: '300px', overflowY: 'auto' }}>
+                      {activeFriendTab === 'friends' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {friendsData.friends.length === 0 ? <p style={{ fontSize: '0.85rem', opacity: 0.7, margin: 0, textAlign: 'center' }}>No friends yet!</p> :
+                            friendsData.friends.map(f => (
+                              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--input-bg)', borderRadius: '8px' }}>
+                                 <span style={{ fontWeight: 600 }}>{f.name}</span>
+                                 <button onClick={() => setSharePoiTarget(f)} style={{ padding: '6px 12px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}>Share POI</button>
+                              </div>
+                            ))
+                          }
+                        </div>
+                      )}
+
+                      {activeFriendTab === 'add' && (
+                        <div>
+                          <input type="text" placeholder="Search by name..." value={friendSearchQuery} onChange={e => handleFriendSearch(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', outline: 'none' }} />
+                          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {friendSearchResults.map(u => (
+                               <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'var(--input-bg)', borderRadius: '8px' }}>
+                                 <span style={{ fontWeight: 600 }}>{u.name}</span>
+                                 {u.friendshipStatus === 'ACCEPTED' ? (
+                                   <span style={{ fontSize: '0.8rem', opacity: 0.6, fontWeight: 600, padding: '4px 8px' }}>Friends</span>
+                                 ) : u.friendshipStatus === 'PENDING' ? (
+                                   <span style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 600, padding: '4px 8px', border: '1px solid #fbbf24', borderRadius: '6px' }}>Pending</span>
+                                 ) : (
+                                   <button onClick={() => handleSendRequest(u.id)} style={{ padding: '6px 12px', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>Send Request</button>
+                                 )}
+                               </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {activeFriendTab === 'requests' && (
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                           {friendsData.pendingRequests.map(req => (
+                             <div key={req.id} style={{ padding: '12px', background: 'var(--input-bg)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                               <span style={{ fontWeight: 600 }}>{req.requester.name} wants to be friends.</span>
+                               <div style={{ display: 'flex', gap: '8px' }}>
+                                 <button onClick={() => handleFriendRespond(req.id, 'ACCEPT')} style={{ flex: 1, padding: '6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Accept</button>
+                                 <button onClick={() => handleFriendRespond(req.id, 'DECLINE')} style={{ flex: 1, padding: '6px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: '6px', cursor: 'pointer' }}>Decline</button>
+                               </div>
+                             </div>
+                           ))}
+                         </div>
+                      )}
+                   </div>
+                 </div>
+               )}
+             </div>
+
+             {/* Directions Toggle */}
+             <div style={{ position: 'relative' }}>
+               <button 
+                 onClick={() => {
+                   if (isRoutingMode) clearRoute();
+                   else setIsRoutingMode(true);
+                 }}
+                 style={{ 
+                   background: isRoutingMode ? 'var(--primary)' : 'var(--surface)', 
+                   border: '1px solid var(--surface-border)', 
+                   padding: isMobile ? '8px 10px' : '10px 16px', 
+                   borderRadius: '24px', 
+                   cursor: 'pointer', 
+                   color: isRoutingMode ? 'white' : 'var(--foreground-dark)', 
+                   fontWeight: 600, 
+                   display: 'flex', 
+                   alignItems: 'center', 
+                   gap: '8px', 
+                   flexShrink: 0,
+                   transition: 'all 0.2s'
+                 }}
+                 title="Get Directions"
+               >
+                 🚗 {isRoutingMode ? (isMobile ? '' : 'Routing...') : (isMobile ? '' : 'Directions')}
+               </button>
+             </div>
+
+             {/* Notifications Component */}
+             <div ref={notificationsRef} style={{ position: 'relative' }}>
+               <button onClick={() => { setIsNotificationsOpen(!isNotificationsOpen); setIsFriendsModalOpen(false); if (!isNotificationsOpen) markNotificationsRead(); }} style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--surface-border)', padding: isMobile ? '8px 10px' : '10px 16px', borderRadius: '24px', cursor: 'pointer', color: 'var(--foreground-dark)', fontWeight: 600, flexShrink: 0 }}>
+                 🔔
+                 {notifications.filter(n => !n.read).length > 0 && (
+                   <span style={{ position: 'absolute', bottom: '-4px', left: '-4px', background: '#ef4444', color: 'white', fontSize: '0.65rem', fontWeight: 'bold', minWidth: '18px', height: '18px', borderRadius: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--surface)' }}>
+                     {notifications.filter(n => !n.read).length}
+                   </span>
+                 )}
+               </button>
+               {isNotificationsOpen && (
+                 <div style={{ position: 'absolute', top: '120%', right: 0, width: isMobile ? '240px' : '280px', background: 'var(--surface)', borderRadius: '16px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', overflow: 'hidden', border: '1px solid var(--surface-border)', zIndex: 110 }}>
+                   <div style={{ padding: '16px', fontWeight: 600, borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <span>Your Activity</span>
+                     <button onClick={() => setIsNotificationsOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--foreground-dark)', cursor: 'pointer', opacity: 0.5 }}>✕</button>
+                   </div>
+                   <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                     {notifications.length === 0 ? <p style={{ padding: '16px', textAlign: 'center', margin: 0, opacity: 0.7, fontSize: '0.85rem' }}>No new notifications.</p> :
+                       notifications.map(n => (
+                         <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid var(--surface-border)', background: n.read ? 'transparent' : 'rgba(59, 130, 246, 0.05)', fontSize: '0.85rem' }}>
+                           {n.message}
+                           <div style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '4px' }}>{new Date(n.createdAt).toLocaleDateString()}</div>
+                         </div>
+                       ))
+                     }
+                   </div>
+                 </div>
+               )}
+             </div>
+
+           </div>
+
+           <div style={{ display: isMobile ? 'none' : 'flex', gap: '12px' }}>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setIsThemeDropdownOpen(!isThemeDropdownOpen)}
+                style={{
+                  padding: '10px 20px', borderRadius: '24px', background: 'var(--surface)',
+                  color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)', cursor: 'pointer', fontWeight: 600,
+                  minWidth: '160px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'all 0.2s'
+                }}
+                onMouseOver={e => e.currentTarget.style.background = 'var(--surface-border)'}
+                onMouseOut={e => e.currentTarget.style.background = 'var(--surface)'}
+              >
+                <span>{THEMES.find(t => t.id === theme)?.label || 'Theme'}</span>
+                <span style={{ fontSize: '0.8rem', marginLeft: '8px' }}>{isThemeDropdownOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {isThemeDropdownOpen && (
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: '8px', width: '100%',
+                  background: 'var(--surface)', backdropFilter: 'blur(16px)',
+                  border: '1px solid var(--surface-border)', borderRadius: '12px',
+                  overflow: 'hidden', zIndex: 40, boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
+                }}>
+                  {THEMES.map(t => (
+                    <div
+                      key={t.id}
+                      onClick={() => { setTheme(t.id); setIsThemeDropdownOpen(false); }}
+                      style={{
+                        padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--surface-border)',
+                        fontSize: '0.9rem', color: theme === t.id ? 'var(--primary)' : 'var(--foreground-dark)',
+                        background: theme === t.id ? 'rgba(0,0,0,0.05)' : 'transparent', fontWeight: theme === t.id ? 'bold' : 'normal'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = 'var(--surface-border)'}
+                      onMouseOut={(e) => e.currentTarget.style.background = theme === t.id ? 'rgba(0,0,0,0.05)' : 'transparent'}
+                    >
+                      {t.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={async () => {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                window.location.href = '/login';
+              }}
+              style={{
+                padding: '10px 20px', borderRadius: '24px', background: 'transparent',
+                color: 'var(--foreground-dark)', border: '1px solid var(--surface-border)', cursor: 'pointer', fontWeight: 600,
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+              onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+            >
+              Logout
+            </button>
+          </div>
+        </nav>
+      </div>
+
+      {/* Enlarge Image Modal Popup */}
+      {enlargedImage && (
+        <div
+          onClick={() => setEnlargedImage(null)}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'zoom-out' }}
+        >
+          <img src={enlargedImage} alt="Enlarged" style={{ maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: '12px', boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }} />
+          <div style={{ position: 'absolute', top: '24px', right: '32px', color: 'white', fontSize: '32px', fontWeight: 'bold' }}>✕</div>
+        </div>
+      )}
+
+      {/* Share POI Modal Popup */}
+      {sharePoiTarget && (
+        <div onClick={() => setSharePoiTarget(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', width: '90%', maxWidth: '500px', borderRadius: '16px', border: '1px solid var(--surface-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.5)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+            <div style={{ padding: '24px', borderBottom: '1px solid var(--surface-border)', background: 'var(--input-bg)' }}>
+              <h2 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--foreground-dark)' }}>Share Places with {sharePoiTarget.name}</h2>
+              <p style={{ margin: '8px 0 0 0', opacity: 0.7, fontSize: '0.9rem' }}>Select the pins you want to instantly clone into their dashboard!</p>
+            </div>
+            
+            <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+               {pins.length === 0 ? <p style={{ opacity: 0.7, textAlign: 'center' }}>You don't have any places to share yet.</p> :
+                 pins.map(p => {
+                    const isSelected = selectedSharePins.includes(p.id);
+                    return (
+                      <div 
+                        key={p.id} 
+                        onClick={() => setSelectedSharePins(prev => isSelected ? prev.filter(id => id !== p.id) : [...prev, p.id])}
+                        style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'var(--input-bg)', borderRadius: '12px', border: isSelected ? `1px solid var(--primary)` : '1px solid var(--surface-border)', cursor: 'pointer', transition: 'all 0.2s' }}
+                      >
+                         <div style={{ width: '20px', height: '20px', borderRadius: '4px', border: isSelected ? 'none' : '1px solid var(--surface-border)', background: isSelected ? 'var(--primary)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0 }}>
+                            {isSelected && '✓'}
+                         </div>
+                         <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600 }}>{p.title}</div>
+                            <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{p.category.label}</div>
+                         </div>
+                      </div>
+                    )
+                 })
+               }
+            </div>
+
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--surface-border)', display: 'flex', gap: '12px', justifyContent: 'flex-end', background: 'var(--input-bg)' }}>
+               <button onClick={() => setSharePoiTarget(null)} style={{ padding: '10px 20px', borderRadius: '24px', background: 'transparent', border: '1px solid var(--surface-border)', color: 'var(--foreground-dark)', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+               <button 
+                 onClick={submitSharePins}
+                 disabled={isSharingData || selectedSharePins.length === 0}
+                 style={{ padding: '10px 24px', borderRadius: '24px', background: selectedSharePins.length > 0 ? 'var(--primary)' : 'var(--surface-border)', color: selectedSharePins.length > 0 ? '#fff' : 'var(--foreground-dark)', border: 'none', fontWeight: 600, cursor: selectedSharePins.length > 0 ? 'pointer' : 'not-allowed', opacity: isSharingData ? 0.7 : 1 }}
+               >
+                 {isSharingData ? 'Transferring...' : `Transfer ${selectedSharePins.length} Places`}
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </main>
+  );
+}

@@ -1,0 +1,94 @@
+datasource db {
+  provider = "sqlite"
+}
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  password  String
+  
+  // Profile details
+  email     String?
+  city      String?
+  country   String?
+  phone     String?
+  bio       String?
+  avatar    String?
+
+  createdAt DateTime @default(now())
+  pois       Poi[]
+  categories       Category[] @relation("UserCategories")
+  sentRequests     Friendship[] @relation("SentRequests")
+  receivedRequests Friendship[] @relation("ReceivedRequests")
+  notifications    Notification[]
+  comments         Comment[]
+}
+
+model Category {
+  id    String @id
+  label String 
+  color String
+  userId      String?
+  user        User?    @relation("UserCategories", fields: [userId], references: [id])
+  pois        Poi[]
+}
+
+model Poi {
+  id          String   @id @default(cuid())
+  sharedPoiId String   @default(cuid())
+  title       String
+  description String?
+  address     String?
+  rating      Int?
+  images      String?
+  latitude    Float
+  longitude   Float
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  creatorName String?
+  
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, sharedPoiId])
+}
+
+model Comment {
+  id          String   @id @default(cuid())
+  text        String
+  sharedPoiId String
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  
+  createdAt   DateTime @default(now())
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      String   @default("PENDING") // 'PENDING' or 'ACCEPTED'
+  createdAt   DateTime @default(now())
+  
+  requester   User     @relation("SentRequests", fields: [requesterId], references: [id])
+  addressee   User     @relation("ReceivedRequests", fields: [addresseeId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // e.g. 'FRIEND_ACCEPTED'
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id])
+}
