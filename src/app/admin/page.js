@@ -116,39 +116,45 @@ export default function AdminDashboard() {
             <div style={{ marginBottom: '20px' }}>
               <input 
                 type="text" 
+                list="user-suggestions"
                 placeholder="Search users by name..." 
                 value={userQuery} 
                 onChange={e => setUserQuery(e.target.value)} 
                 style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '1rem', color: '#111' }}
               />
+              <datalist id="user-suggestions">
+                {users.map(u => <option key={u.id} value={u.name} />)}
+              </datalist>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: '#111' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  <th style={{ padding: '12px' }}>Name</th>
-                  <th style={{ padding: '12px' }}>Role</th>
-                  <th style={{ padding: '12px' }}>Activity</th>
-                  <th style={{ padding: '12px' }}>Status</th>
-                  <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(u => (
-                  <tr key={u.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '16px 12px', fontWeight: '500' }}>{u.name}</td>
-                    <td style={{ padding: '16px 12px' }}><span style={{ padding: '4px 8px', background: u.role==='ADMIN'?'#fef08a':'#f3f4f6', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '600' }}>{u.role}</span></td>
-                    <td style={{ padding: '16px 12px', fontSize: '0.9rem', color: '#4b5563' }}>{u._count.pois} POIs, {u._count.comments} Comments</td>
-                    <td style={{ padding: '16px 12px' }}>
-                      {u.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
-                    </td>
-                    <td style={{ padding: '16px 12px', textAlign: 'right' }}>
-                      <button onClick={() => toggleUserDisable(u.id, u.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>{u.disabled ? 'Enable' : 'Disable'}</button>
-                      <button onClick={() => deleteUser(u.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
-                    </td>
+            <div style={{ maxHeight: '500px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: '#111' }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#f9fafb', zIndex: 1 }}>
+                  <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                    <th style={{ padding: '12px' }}>Name</th>
+                    <th style={{ padding: '12px' }}>Role</th>
+                    <th style={{ padding: '12px' }}>Activity</th>
+                    <th style={{ padding: '12px' }}>Status</th>
+                    <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {users.map(u => (
+                    <tr key={u.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '16px 12px', fontWeight: '500' }}>{u.name}</td>
+                      <td style={{ padding: '16px 12px' }}><span style={{ padding: '4px 8px', background: u.role==='ADMIN'?'#fef08a':'#f3f4f6', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '600' }}>{u.role}</span></td>
+                      <td style={{ padding: '16px 12px', fontSize: '0.9rem', color: '#4b5563' }}>{u._count.pois} POIs, {u._count.comments} Comments</td>
+                      <td style={{ padding: '16px 12px' }}>
+                        {u.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
+                      </td>
+                      <td style={{ padding: '16px 12px', textAlign: 'right' }}>
+                        <button onClick={() => toggleUserDisable(u.id, u.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>{u.disabled ? 'Enable' : 'Disable'}</button>
+                        <button onClick={() => deleteUser(u.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -157,39 +163,45 @@ export default function AdminDashboard() {
             <div style={{ marginBottom: '20px' }}>
               <input 
                 type="text" 
+                list="poi-suggestions"
                 placeholder="Search saved places by title..." 
                 value={poiQuery} 
                 onChange={e => setPoiQuery(e.target.value)} 
                 style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '1rem', color: '#111' }}
               />
+              <datalist id="poi-suggestions">
+                {pois.map(p => <option key={p.id} value={p.title} />)}
+              </datalist>
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: '#111' }}>
-              <thead>
-                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-                  <th style={{ padding: '12px' }}>Title</th>
-                  <th style={{ padding: '12px' }}>Author</th>
-                  <th style={{ padding: '12px' }}>Location</th>
-                  <th style={{ padding: '12px' }}>Status</th>
-                  <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pois.map(p => (
-                  <tr key={p.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: '16px 12px', fontWeight: '500' }}>{p.title}</td>
-                    <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.user?.name}</td>
-                    <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.latitude.toFixed(4)}, {p.longitude.toFixed(4)}</td>
-                    <td style={{ padding: '16px 12px' }}>
-                      {p.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
-                    </td>
-                    <td style={{ padding: '16px 12px', textAlign: 'right' }}>
-                      <button onClick={() => togglePoiDisable(p.id, p.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>{p.disabled ? 'Enable' : 'Disable'}</button>
-                      <button onClick={() => deletePoi(p.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
-                    </td>
+            <div style={{ maxHeight: '500px', overflowY: 'auto', border: '1px solid #eee', borderRadius: '8px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', color: '#111' }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#f9fafb', zIndex: 1 }}>
+                  <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                    <th style={{ padding: '12px' }}>Title</th>
+                    <th style={{ padding: '12px' }}>Author</th>
+                    <th style={{ padding: '12px' }}>Location</th>
+                    <th style={{ padding: '12px' }}>Status</th>
+                    <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pois.map(p => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '16px 12px', fontWeight: '500' }}>{p.title}</td>
+                      <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.user?.name}</td>
+                      <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.latitude.toFixed(4)}, {p.longitude.toFixed(4)}</td>
+                      <td style={{ padding: '16px 12px' }}>
+                        {p.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
+                      </td>
+                      <td style={{ padding: '16px 12px', textAlign: 'right' }}>
+                        <button onClick={() => togglePoiDisable(p.id, p.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>{p.disabled ? 'Enable' : 'Disable'}</button>
+                        <button onClick={() => deletePoi(p.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
