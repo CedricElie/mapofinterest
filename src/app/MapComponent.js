@@ -93,12 +93,36 @@ const getMapLibreStyle = (theme) => {
     };
   }
 
+  if (theme === 'transport') {
+    return {
+      version: 8,
+      sources: {
+        'transport': {
+          type: 'raster',
+          tiles: ['https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png'],
+          tileSize: 256,
+          maxzoom: 19,
+          attribution: '&copy; <a href="http://memomaps.de">ÖPNV-Karte</a> contributors'
+        }
+      },
+      layers: [
+        {
+          id: 'transport-layer',
+          type: 'raster',
+          source: 'transport',
+          minzoom: 0,
+          maxzoom: 19
+        }
+      ]
+    };
+  }
+
   return theme === 'light' 
     ? 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
     : 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 };
 
-export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingLocation, theme, flyToLocation, activePinIndex }) {
+export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingLocation, theme, flyToLocation, activePinIndex, routeData, onPinSelect }) {
   const mapContainer = useRef(null);
   const map = useRef(null);
   
@@ -135,17 +159,47 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
       map.current.addControl(new maplibregl.NavigationControl({
         visualizePitch: true,
       }), 'bottom-right');
+
+      // Add route source and layer
+      map.current.addSource('route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        }
+      });
+
+      map.current.addLayer({
+        id: 'route',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#4f46e5',
+          'line-width': 6,
+          'line-opacity': 0.8
+        }
+      });
     });
 
     map.current.on('click', (e) => {
-      if (isDroppingRef.current && onMapClickRef.current) {
+      if (onMapClickRef.current) {
         onMapClickRef.current({ lng: e.lngLat.lng, lat: e.lngLat.lat });
       }
     });
 
     return () => {
-      map.current.remove();
-      map.current = null;
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
     };
   }, []); 
 
@@ -207,6 +261,14 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
         el.style.textAlign = 'center';
         el.style.cursor = 'pointer';
         
+        // Add click listener for routing selection
+        el.addEventListener('click', (e) => {
+          if (onPinSelect) {
+            e.stopPropagation();
+            onPinSelect(newPin);
+          }
+        });
+        
         let starsHTML = '';
         if (newPin.rating) {
            starsHTML = `<div style="color: #fbbf24; font-size: 11px; letter-spacing: -1px; margin-top: 2px;">${'★'.repeat(newPin.rating)}${'☆'.repeat(5 - newPin.rating)}</div>`;
@@ -252,8 +314,10 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
     // Cleanup any markers that are no longer in the pins array payload
     Object.keys(markersRef.current).forEach(pinId => {
       if (!currentPinIds.has(pinId.toString())) {
-        markersRef.current[pinId].remove();
-        delete markersRef.current[pinId];
+        if (markersRef.current[pinId]) {
+          markersRef.current[pinId].remove();
+          delete markersRef.current[pinId];
+        }
       }
     });
   }, [pins]);
@@ -278,6 +342,32 @@ export default function MapComponent({ isDroppingPin, onMapClick, pins, pendingL
       }
     }
   }, [pendingLocation, theme]);
+
+  // Handle Route data updates
+  useEffect(() => {
+    if (!map.current || !map.current.getSource('route')) return;
+    
+    if (routeData && routeData.geometry && routeData.geometry.coordinates && routeData.geometry.coordinates.length > 0) {
+      map.current.getSource('route').setData(routeData);
+      
+      // Auto-fit bounds to the route
+      const coordinates = routeData.geometry.coordinates;
+      const bounds = coordinates.reduce((acc, coord) => {
+        return acc.extend(coord);
+      }, new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+      
+      map.current.fitBounds(bounds, { padding: 80, duration: 2000 });
+    } else {
+      map.current.getSource('route').setData({
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: []
+        }
+      });
+    }
+  }, [routeData]);
 
   return (
     <div 

@@ -67,20 +67,30 @@ export async function POST(request) {
       }
 
       // 3. Systematically clone exactly the POI structure logically mapping Receiver ID globally!
-      await prisma.poi.create({
-         data: {
-            title: pin.title,
-            description: pin.description,
-            address: pin.address,
-            rating: pin.rating,
-            images: pin.images,
-            latitude: pin.latitude,
-            longitude: pin.longitude,
-            userId: friendId,
-            categoryId: targetCategoryId
+      const existing = await prisma.poi.findUnique({
+         where: {
+            userId_sharedPoiId: { userId: friendId, sharedPoiId: pin.sharedPoiId }
          }
       });
-      sharedCount++;
+      
+      if (!existing) {
+         await prisma.poi.create({
+            data: {
+               title: pin.title,
+               description: pin.description,
+               address: pin.address,
+               rating: pin.rating,
+               images: pin.images,
+               latitude: pin.latitude,
+               longitude: pin.longitude,
+               userId: friendId,
+               creatorName: pin.creatorName || currentUser.name,
+               categoryId: targetCategoryId,
+               sharedPoiId: pin.sharedPoiId
+            }
+         });
+         sharedCount++;
+      }
     }
 
     // 4. Dispatch Notifications Bi-Directionally!

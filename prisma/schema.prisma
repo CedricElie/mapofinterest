@@ -11,12 +11,22 @@ model User {
   id        String   @id @default(cuid())
   name      String   @unique
   password  String
+  
+  // Profile details
+  email     String?
+  city      String?
+  country   String?
+  phone     String?
+  bio       String?
+  avatar    String?
+
   createdAt DateTime @default(now())
   pois       Poi[]
   categories       Category[] @relation("UserCategories")
   sentRequests     Friendship[] @relation("SentRequests")
   receivedRequests Friendship[] @relation("ReceivedRequests")
   notifications    Notification[]
+  comments         Comment[]
 }
 
 model Category {
@@ -30,6 +40,7 @@ model Category {
 
 model Poi {
   id          String   @id @default(cuid())
+  sharedPoiId String   @default(cuid())
   title       String
   description String?
   address     String?
@@ -40,9 +51,22 @@ model Poi {
   
   userId      String
   user        User     @relation(fields: [userId], references: [id])
+  creatorName String?
   
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, sharedPoiId])
+}
+
+model Comment {
+  id          String   @id @default(cuid())
+  text        String
+  sharedPoiId String
+  
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
   
   createdAt   DateTime @default(now())
 }

@@ -3,6 +3,60 @@
 import { useState, useEffect, useRef } from 'react';
 import MapComponent from './MapComponent';
 
+function PinComments({ sharedPoiId }) {
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/comments?sharedPoiId=${sharedPoiId}`)
+      .then(res => res.json())
+      .then(data => { setComments(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [sharedPoiId]);
+
+  const postComment = async (e) => {
+    e.stopPropagation();
+    if (!text) return;
+    const res = await fetch('/api/comments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sharedPoiId, text })
+    });
+    if (res.ok) {
+      const newC = await res.json();
+      setComments([newC, ...comments]);
+      setText('');
+    }
+  };
+
+  if (loading) return <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: '16px' }}>Loading comments...</div>;
+
+  return (
+    <div style={{ marginTop: '16px', borderTop: '1px solid var(--surface-border)', paddingTop: '12px' }} onClick={e => e.stopPropagation()}>
+      <h4 style={{ fontSize: '0.85rem', margin: '0 0 8px 0', opacity: 0.8 }}>Comments</h4>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+        <input value={text} onChange={e => setText(e.target.value)} placeholder="Add a comment..." style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', fontSize: '0.8rem' }} />
+        <button onClick={postComment} disabled={!text} style={{ padding: '0 12px', borderRadius: '6px', background: text ? 'var(--primary)' : 'transparent', color: text ? '#fff' : 'var(--foreground-dark)', border: text ? 'none' : '1px solid var(--surface-border)', fontSize: '0.8rem', fontWeight: 600 }}>Post</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }} className="custom-scrollbar">
+        {comments.length === 0 ? <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>No comments yet.</p> :
+          comments.map(c => (
+            <div key={c.id} style={{ padding: '8px', background: 'rgba(0,0,0,0.02)', borderRadius: '6px', border: '1px solid var(--surface-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>{c.user.name}</span>
+                <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>{new Date(c.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
+              </div>
+              <div style={{ fontSize: '0.8rem' }}>{c.text}</div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
 
 
 export default function Home() {
@@ -58,8 +112,21 @@ export default function Home() {
     { id: 'dark', label: '🌙 Dark Mode' },
     { id: 'light', label: '☀️ Light Mode' },
     { id: 'colored', label: '🗺️ Colored OSM' },
+    { id: 'transport', label: '🚌 Transport Map' },
     { id: 'satellite', label: '🌍 Satellite' }
   ];
+
+  // Routing State
+  const [isRoutingMode, setIsRoutingMode] = useState(false);
+  const [routingStep, setRoutingStep] = useState('START'); // 'START', 'END', 'RESULT'
+  const [routePoints, setRoutePoints] = useState([]); // [{lat, lng}, {lat, lng}]
+  const [routeData, setRouteData] = useState(null);
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
+  const [routeDistance, setRouteDistance] = useState(null);
+  const [routeDuration, setRouteDuration] = useState(null);
+  const [startQuery, setStartQuery] = useState('');
+  const [startSuggestions, setStartSuggestions] = useState([]);
+  const [isGPSLoading, setIsGPSLoading] = useState(false);
 
   // Handle Responsive Sidebar
   useEffect(() => {
@@ -97,7 +164,7 @@ export default function Home() {
 
   // Apply theme to DOM
   useEffect(() => {
-    if (theme === 'light' || theme === 'colored') {
+    if (theme === 'light' || theme === 'colored' || theme === 'transport') {
       document.documentElement.setAttribute('data-theme', 'light');
     } else {
       document.documentElement.removeAttribute('data-theme');
@@ -241,12 +308,104 @@ export default function Home() {
 
   const handleMapClick = (lngLat) => {
     setActivePinIndex(null);
+    
+    // Handle Routing Mode point selection
+    if (isRoutingMode) {
+      if (routingStep === 'START') {
+        setRoutePoints([lngLat]);
+        setRoutingStep('END');
+      } 
+      // Destination must be a pin, handled via pin list or marker click (future)
+      return;
+    }
+
     if (isDroppingPin) {
       setPendingLocation(lngLat);
       setIsDroppingPin(false);
       // Auto-reopen sidebar on mobile to show the form
       if (isMobile) setIsSidebarOpen(true);
     }
+  };
+
+  const calculateRoute = async (start, end) => {
+    setIsCalculatingRoute(true);
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`;
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (data.code === 'Ok') {
+        setRouteData(data.routes[0]);
+        setRouteDistance(data.routes[0].distance);
+        setRouteDuration(data.routes[0].duration);
+        setRoutingStep('RESULT');
+      } else {
+        alert('Could not find a route between these points.');
+      }
+    } catch (e) {
+      console.error('Routing error:', e);
+      alert('Routing service is currently unavailable.');
+    }
+    setIsCalculatingRoute(false);
+  };
+
+  const handleGPSStart = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser");
+      return;
+    }
+    setIsGPSLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lngLat = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+        setRoutePoints([lngLat]);
+        setFlyToLocation(lngLat);
+        setRoutingStep('END');
+        setIsGPSLoading(false);
+      },
+      (err) => {
+        alert("Unable to retrieve your location: " + err.message);
+        setIsGPSLoading(false);
+      }
+    );
+  };
+
+  const searchStartAddres = async (q) => {
+    setStartQuery(q);
+    if (q.length < 3) { setStartSuggestions([]); return; }
+    try {
+       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`);
+       const data = await res.json();
+       setStartSuggestions(data);
+    } catch(e) {}
+  };
+
+  const selectStartSuggestion = (s) => {
+    const lngLat = { lng: parseFloat(s.lon), lat: parseFloat(s.lat) };
+    setRoutePoints([lngLat]);
+    setFlyToLocation(lngLat);
+    setStartSuggestions([]);
+    setStartQuery(s.display_name);
+    setRoutingStep('END');
+  };
+
+  const selectDestinationPin = (pin) => {
+    if (routePoints.length === 0) return;
+    const endPoint = { lat: pin.lat, lng: pin.lng };
+    const newPoints = [routePoints[0], endPoint];
+    setRoutePoints(newPoints);
+    calculateRoute(newPoints[0], newPoints[1]);
+  };
+
+  const clearRoute = () => {
+    setRoutePoints([]);
+    setRouteData(null);
+    setRouteDistance(null);
+    setRouteDuration(null);
+    setIsRoutingMode(false);
+    setRoutingStep('START');
+    setStartQuery('');
+    setStartSuggestions([]);
   };
 
   const clearPending = () => {
@@ -487,6 +646,11 @@ export default function Home() {
           }}>
             <span>✨</span> Places of Interest
           </h1>
+          {currentUser && (
+            <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '6px' }}>
+              Hello, {currentUser.name}! 👋
+            </p>
+          )}
           <p style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 500, margin: 0 }}>Discover and share your places of interest.</p>
         </div>
 
@@ -703,6 +867,10 @@ export default function Home() {
                           )}
                         </div>
                         <div style={{ fontSize: '0.8rem', opacity: 0.8, marginTop: '2px', color: p.category?.color || '#a1a1aa' }}>{p.category?.label}</div>
+                        <div style={{ fontSize: '0.75rem', opacity: 0.6, marginTop: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>👤 {p.creatorName || 'Unknown'}</span>
+                          {p.createdAt && <span>{new Date(p.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(p.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                        </div>
                         {activePinIndex === idx && (
                           <div style={{ fontSize: '0.9rem', marginTop: '12px', padding: '12px', background: 'var(--surface)', borderRadius: '8px', border: '1px solid var(--surface-border)' }}>
                             {p.description ? (
@@ -745,10 +913,14 @@ export default function Home() {
                               </div>
                             )}
 
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-                              <button onClick={(e) => { e.stopPropagation(); handleEditClick(p); }} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid var(--primary)', color: 'var(--primary)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Edit</button>
-                              <button onClick={(e) => handleDeletePin(p.id, e)} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Delete</button>
-                            </div>
+                            {(!p.creatorName || p.creatorName === currentUser?.name) && (
+                              <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                                <button onClick={(e) => { e.stopPropagation(); handleEditClick(p); }} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid var(--primary)', color: 'var(--primary)', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Edit</button>
+                                <button onClick={(e) => handleDeletePin(p.id, e)} style={{ flex: 1, padding: '8px', background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Delete</button>
+                              </div>
+                            )}
+
+                            <PinComments sharedPoiId={p.sharedPoiId} />
                           </div>
                         )}
                       </li>
@@ -785,7 +957,124 @@ export default function Home() {
           pendingLocation={pendingLocation}
           pins={filteredPins}
           activePinIndex={activePinIndex}
+          routeData={routeData}
+          onPinSelect={(pin) => {
+            if (isRoutingMode && routingStep === 'END') {
+              selectDestinationPin(pin);
+            }
+          }}
         />
+
+        {/* Directions / Routing HUD */}
+        {(isRoutingMode || routeData) && (
+          <div style={{ position: 'absolute', top: '90px', left: '50%', transform: 'translateX(-50%)', zIndex: 60, width: '90%', maxWidth: '450px' }}>
+            <div className="glass-panel" style={{ background: 'var(--surface)', padding: '20px', borderRadius: '20px', border: '1px solid var(--surface-border)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>🚗</span>
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Route Planner</h3>
+                 </div>
+                 <button onClick={clearRoute} style={{ background: 'transparent', border: 'none', color: 'var(--foreground-dark)', opacity: 0.5, fontWeight: 600, cursor: 'pointer', fontSize: '1rem' }}>✕</button>
+              </div>
+
+              {/* STEP 1: START SELECTION */}
+              {routingStep === 'START' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                   <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, opacity: 0.8 }}>Step 1: Where are you starting from?</p>
+                   
+                   <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        onClick={handleGPSStart} 
+                        disabled={isGPSLoading}
+                        style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: 600 }}
+                      >
+                         {isGPSLoading ? 'Locating...' : '📍 My Location'}
+                      </button>
+                      <div style={{ position: 'relative', flex: 2 }}>
+                         <input 
+                           type="text" 
+                           placeholder="Type an address..." 
+                           value={startQuery}
+                           onChange={(e) => searchStartAddres(e.target.value)}
+                           style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', outline: 'none' }}
+                         />
+                         {startSuggestions.length > 0 && (
+                           <div style={{ position: 'absolute', top: '110%', left: 0, width: '100%', background: 'var(--surface)', borderRadius: '12px', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', overflow: 'hidden', zIndex: 70, border: '1px solid var(--surface-border)' }}>
+                              {startSuggestions.map((s, i) => (
+                                <div key={i} onClick={() => selectStartSuggestion(s)} style={{ padding: '10px 14px', fontSize: '0.85rem', cursor: 'pointer', borderBottom: i === startSuggestions.length - 1 ? 'none' : '1px solid var(--surface-border)', color: 'var(--foreground-dark)' }} onMouseOver={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.1)'} onMouseOut={e => e.currentTarget.style.background = 'transparent'}>
+                                  {s.display_name}
+                                </div>
+                              ))}
+                           </div>
+                         )}
+                      </div>
+                   </div>
+                   <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.6, textAlign: 'center' }}>- OR - Click anywhere on the map to set a custom start point.</p>
+                </div>
+              )}
+
+              {/* STEP 2: END SELECTION */}
+              {routingStep === 'END' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, opacity: 0.8 }}>Step 2: Choose your saved destination</p>
+                      <button onClick={() => setRoutingStep('START')} style={{ fontSize: '0.8rem', color: 'var(--primary)', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>← Back</button>
+                   </div>
+                   
+                   <p style={{ margin: '4px 0', fontSize: '0.8rem', opacity: 0.6 }}>Click a marker on the map or select from your list below:</p>
+                   
+                   <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }} className="custom-scrollbar">
+                      {pins.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', opacity: 0.5, fontSize: '0.85rem' }}>No saved places found.</p>
+                      ) : (
+                        pins.map(p => (
+                          <div 
+                            key={p.id} 
+                            onClick={() => selectDestinationPin(p)}
+                            style={{ padding: '12px', background: 'var(--input-bg)', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: '1px solid var(--surface-border)', transition: 'all 0.2s' }}
+                            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--primary)'}
+                            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--surface-border)'}
+                          >
+                             <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.title}</span>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>{p.address || 'No address'}</span>
+                             </div>
+                             <span style={{ fontSize: '1.2rem' }}>🏁</span>
+                          </div>
+                        ))
+                      )}
+                   </div>
+                </div>
+              )}
+
+              {/* STEP 3: RESULT */}
+              {routingStep === 'RESULT' && routeData && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary)' }}>Route Calculated!</p>
+                      <button onClick={() => setRoutingStep('START')} style={{ fontSize: '0.85rem', color: 'var(--foreground-dark)', opacity: 0.6, background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Restart</button>
+                   </div>
+
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--input-bg)', padding: '16px', borderRadius: '16px', border: '1px solid var(--surface-border)' }}>
+                      <div style={{ display: 'flex', gap: '24px' }}>
+                         <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Distance</span>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800 }}>{(routeDistance / 1000).toFixed(1)} km</span>
+                         </div>
+                         <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.75rem', opacity: 0.6, fontWeight: 700, textTransform: 'uppercase' }}>Est. Time</span>
+                            <span style={{ fontSize: '1.2rem', fontWeight: 800 }}>{Math.round(routeDuration / 60)} min</span>
+                         </div>
+                      </div>
+                      <button onClick={() => window.open(`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${routePoints[0].lat}%2C${routePoints[0].lng}%3B${routePoints[1].lat}%2C${routePoints[1].lng}`, '_blank')} style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 700, boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>GO</button>
+                   </div>
+                </div>
+              )}
+              
+              {isCalculatingRoute && <div style={{ fontSize: '0.85rem', color: 'var(--primary)', textAlign: 'center', fontWeight: 600, animation: 'pulse 1.5s infinite' }}>Analyzing road network...</div>}
+            </div>
+          </div>
+        )}
 
         {/* Floating Mobile Map Type Selector */}
         {isMobile && (
@@ -956,6 +1245,33 @@ export default function Home() {
                    </div>
                  </div>
                )}
+             </div>
+
+             {/* Directions Toggle */}
+             <div style={{ position: 'relative' }}>
+               <button 
+                 onClick={() => {
+                   if (isRoutingMode) clearRoute();
+                   else setIsRoutingMode(true);
+                 }}
+                 style={{ 
+                   background: isRoutingMode ? 'var(--primary)' : 'var(--surface)', 
+                   border: '1px solid var(--surface-border)', 
+                   padding: isMobile ? '8px 10px' : '10px 16px', 
+                   borderRadius: '24px', 
+                   cursor: 'pointer', 
+                   color: isRoutingMode ? 'white' : 'var(--foreground-dark)', 
+                   fontWeight: 600, 
+                   display: 'flex', 
+                   alignItems: 'center', 
+                   gap: '8px', 
+                   flexShrink: 0,
+                   transition: 'all 0.2s'
+                 }}
+                 title="Get Directions"
+               >
+                 🚗 {isRoutingMode ? (isMobile ? '' : 'Routing...') : (isMobile ? '' : 'Directions')}
+               </button>
              </div>
 
              {/* Notifications Component */}
