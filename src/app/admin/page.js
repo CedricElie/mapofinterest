@@ -12,6 +12,11 @@ export default function AdminDashboard() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Detail Modal States
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedPoi, setSelectedPoi] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
   useEffect(() => {
     fetch('/api/user/me')
       .then(res => res.json())
@@ -44,7 +49,26 @@ export default function AdminDashboard() {
     fetchPois();
   }, [isAdmin, poiQuery]);
 
-  const toggleUserDisable = async (id, currentStatus) => {
+  const viewUserDetails = async (id) => {
+    setDetailLoading(true);
+    const res = await fetch(`/api/admin/users/${id}`);
+    if (res.ok) {
+      setSelectedUser(await res.json());
+    }
+    setDetailLoading(false);
+  };
+
+  const viewPoiDetails = async (id) => {
+    setDetailLoading(true);
+    const res = await fetch(`/api/admin/pois/${id}`);
+    if (res.ok) {
+      setSelectedPoi(await res.json());
+    }
+    setDetailLoading(false);
+  };
+
+  const toggleUserDisable = async (e, id, currentStatus) => {
+    e.stopPropagation();
     const res = await fetch(`/api/admin/users/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -55,7 +79,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const deleteUser = async (id) => {
+  const deleteUser = async (e, id) => {
+    e.stopPropagation();
     if (!confirm("Are you sure? This deletes everything belonging to the user!")) return;
     const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
     if (res.ok) {
@@ -63,7 +88,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const togglePoiDisable = async (id, currentStatus) => {
+  const togglePoiDisable = async (e, id, currentStatus) => {
+    e.stopPropagation();
     const res = await fetch(`/api/admin/pois/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -74,7 +100,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const deletePoi = async (id) => {
+  const deletePoi = async (e, id) => {
+    e.stopPropagation();
     if (!confirm("Are you sure? This drops the POI for everyone!")) return;
     const res = await fetch(`/api/admin/pois/${id}`, { method: 'DELETE' });
     if (res.ok) {
@@ -85,7 +112,85 @@ export default function AdminDashboard() {
   if (loading) return <div style={{ padding: '40px', textAlign: 'center' }}>Loading Admin Portal...</div>;
 
   return (
-    <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'system-ui, sans-serif', color: '#111' }}>
+    <div style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'system-ui, sans-serif', color: '#111', position: 'relative' }}>
+      
+      {/* Detail Modal Overlay */}
+      {(selectedUser || selectedPoi || detailLoading) && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto', padding: '32px', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <button onClick={() => { setSelectedUser(null); setSelectedPoi(null); }} style={{ position: 'absolute', top: '16px', right: '16px', background: '#f3f4f6', border: 'none', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800' }}>✕</button>
+            
+            {detailLoading && <p style={{ textAlign: 'center', padding: '20px' }}>Loading details...</p>}
+            
+            {selectedUser && (
+              <div>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>User: {selectedUser.name}</h2>
+                <p style={{ color: '#4b5563', marginBottom: '24px' }}>Member since: {new Date(selectedUser.createdAt).toLocaleDateString()}</p>
+                
+                <div style={{ marginBottom: '24px' }}>
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>Friends ({selectedUser.friends.length})</h3>
+                  {selectedUser.friends.length === 0 ? <p style={{ fontSize: '0.9rem', color: '#666' }}>No friends yet.</p> : (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {selectedUser.friends.map(f => (
+                        <span key={f.id} style={{ background: '#f3f4f6', padding: '4px 10px', borderRadius: '20px', fontSize: '0.85rem' }}>{f.name}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', marginBottom: '12px', borderBottom: '1px solid #eee', paddingBottom: '8px' }}>Saved Places ({selectedUser.pois.length})</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {selectedUser.pois.length === 0 ? <p style={{ fontSize: '0.9rem', color: '#666' }}>No places saved.</p> : selectedUser.pois.map(p => (
+                      <div key={p.id} style={{ padding: '10px', border: '1px solid #f3f4f6', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <p style={{ fontWeight: '600', margin: 0 }}>{p.title}</p>
+                          <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>{p.category.label}</p>
+                        </div>
+                        <span style={{ fontSize: '0.8rem', color: '#999' }}>{new Date(p.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedPoi && (
+              <div>
+                <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>Place: {selectedPoi.title}</h2>
+                <p style={{ color: '#4b5563', marginBottom: '16px' }}>Author: {selectedPoi.user?.name} ({selectedPoi.user?.email || 'No email'})</p>
+                
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                  <span style={{ background: selectedPoi.category.color + '22', color: selectedPoi.category.color, padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' }}>{selectedPoi.category.label}</span>
+                  <span style={{ background: '#fef3c7', color: '#92400e', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: '600' }}>⭐ {selectedPoi.rating || 0} / 5</span>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <p style={{ fontWeight: '600', marginBottom: '4px' }}>Address</p>
+                  <p style={{ fontSize: '0.95rem', margin: 0 }}>{selectedPoi.address || 'No address provided'}</p>
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <p style={{ fontWeight: '600', marginBottom: '4px' }}>Description</p>
+                  <p style={{ fontSize: '0.95rem', margin: 0, whiteSpace: 'pre-wrap' }}>{selectedPoi.description || 'No description provided'}</p>
+                </div>
+
+                {selectedPoi.images && JSON.parse(selectedPoi.images).length > 0 && (
+                  <div>
+                    <p style={{ fontWeight: '600', marginBottom: '8px' }}>Images</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '12px' }}>
+                      {JSON.parse(selectedPoi.images).map((img, idx) => (
+                        <img key={idx} src={img} style={{ width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #eee' }} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
         <div>
           <h1 style={{ fontSize: '2rem', fontWeight: '800', margin: '0 0 8px 0', color: '#000' }}>Security Center</h1>
@@ -139,7 +244,7 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {users.map(u => (
-                    <tr key={u.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <tr onClick={() => viewUserDetails(u.id)} key={u.id} style={{ borderBottom: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.1s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                       <td style={{ padding: '16px 12px', fontWeight: '500' }}>{u.name}</td>
                       <td style={{ padding: '16px 12px' }}><span style={{ padding: '4px 8px', background: u.role==='ADMIN'?'#fef08a':'#f3f4f6', borderRadius: '4px', fontSize: '0.8rem', fontWeight: '600' }}>{u.role}</span></td>
                       <td style={{ padding: '16px 12px', fontSize: '0.9rem', color: '#4b5563' }}>{u._count.pois} POIs, {u._count.comments} Comments</td>
@@ -147,8 +252,8 @@ export default function AdminDashboard() {
                         {u.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
                       </td>
                       <td style={{ padding: '16px 12px', textAlign: 'right' }}>
-                        <button onClick={() => toggleUserDisable(u.id, u.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>{u.disabled ? 'Enable' : 'Disable'}</button>
-                        <button onClick={() => deleteUser(u.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
+                        <button onClick={(e) => toggleUserDisable(e, u.id, u.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', color: '#111' }}>{u.disabled ? 'Enable' : 'Disable'}</button>
+                        <button onClick={(e) => deleteUser(e, u.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -186,7 +291,7 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {pois.map(p => (
-                    <tr key={p.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <tr onClick={() => viewPoiDetails(p.id)} key={p.id} style={{ borderBottom: '1px solid #e5e7eb', cursor: 'pointer', transition: 'background 0.1s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
                       <td style={{ padding: '16px 12px', fontWeight: '500' }}>{p.title}</td>
                       <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.user?.name}</td>
                       <td style={{ padding: '16px 12px', color: '#4b5563', fontSize: '0.9rem' }}>{p.latitude.toFixed(4)}, {p.longitude.toFixed(4)}</td>
@@ -194,8 +299,8 @@ export default function AdminDashboard() {
                         {p.disabled ? <span style={{ color: '#ef4444', fontWeight: '600', fontSize: '0.9rem' }}>Disabled</span> : <span style={{ color: '#10b981', fontWeight: '600', fontSize: '0.9rem' }}>Active</span>}
                       </td>
                       <td style={{ padding: '16px 12px', textAlign: 'right' }}>
-                        <button onClick={() => togglePoiDisable(p.id, p.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>{p.disabled ? 'Enable' : 'Disable'}</button>
-                        <button onClick={() => deletePoi(p.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
+                        <button onClick={(e) => togglePoiDisable(e, p.id, p.disabled)} style={{ marginRight: '8px', padding: '6px 12px', background: '#f3f4f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', color: '#111' }}>{p.disabled ? 'Enable' : 'Disable'}</button>
+                        <button onClick={(e) => deletePoi(e, p.id)} style={{ padding: '6px 12px', background: '#fee2e2', color: '#b91c1c', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>Delete</button>
                       </td>
                     </tr>
                   ))}
