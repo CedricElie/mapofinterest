@@ -24,7 +24,8 @@ model User {
   disabled  Boolean  @default(false)
 
   createdAt DateTime @default(now())
-  pois       Poi[]
+  ownedPois  Poi[]    @relation("OwnedPois")
+  sharedPois Poi[]    @relation("SharedPois")
   categories       Category[] @relation("UserCategories")
   sentRequests     Friendship[] @relation("SentRequests")
   receivedRequests Friendship[] @relation("ReceivedRequests")
@@ -43,7 +44,7 @@ model Category {
 
 model Poi {
   id          String   @id @default(cuid())
-  sharedPoiId String   @default(cuid())
+  sharedPoiId String   @default(cuid()) // Grouping for comments remains
   title       String
   description String?
   address     String?
@@ -52,16 +53,17 @@ model Poi {
   latitude    Float
   longitude   Float
   
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
+  userId      String // Owner ID
+  user        User     @relation("OwnedPois", fields: [userId], references: [id])
+  
+  sharedWith  User[]   @relation("SharedPois")
+  
   creatorName String?
   
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
   disabled    Boolean  @default(false)
   createdAt   DateTime @default(now())
-
-  @@unique([userId, sharedPoiId])
 }
 
 model Comment {

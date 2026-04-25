@@ -11,27 +11,41 @@ export async function DELETE(request, { params }) {
   const { id } = await params;
 
   try {
-    // Verify ownership before deletion securely
-    const targetPin = await prisma.poi.findUnique({ where: { id } });
-    if (!targetPin || targetPin.userId !== userId) {
-      return NextResponse.json({ error: 'Not Found or Unauthorized' }, { status: 403 });
+    const targetPin = await prisma.poi.findUnique({ 
+      where: { id },
+      include: { sharedWith: true }
+    });
+    
+    if (!targetPin) {
+      return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
 
-    const currentUser = await prisma.user.findUnique({ where: { id: userId } });
-    const isCreator = !targetPin.creatorName || targetPin.creatorName === currentUser.name;
-    if (!isCreator) {
-      return NextResponse.json({ error: 'Only the creator of a saved place can delete it' }, { status: 403 });
+    // Check if user is the owner
+    const isOwner = targetPin.userId === userId;
+    // Check if user is a recipient
+    const isRecipient = targetPin.sharedWith.some(u => u.id === userId);
+
+    if (!isOwner && !isRecipient) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    // Delete all linked comments globally
-    await prisma.comment.deleteMany({
-      where: { sharedPoiId: targetPin.sharedPoiId }
-    });
-
-    // Delete all cloned copies of this POI globally
-    await prisma.poi.deleteMany({
-       where: { sharedPoiId: targetPin.sharedPoiId }
-    });
+    if (isOwner) {
+      // Owner deletes the primary record and all shared access entries
+      await prisma.comment.deleteMany({
+        where: { sharedPoiId: targetPin.sharedPoiId }
+      });
+      await prisma.poi.delete({ where: { id } });
+    } else {
+      // Recipient simply removes access for themselves
+      await prisma.poi.update({
+        where: { id },
+        data: {
+          sharedWith: {
+            disconnect: { id: userId }
+          }
+        }
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

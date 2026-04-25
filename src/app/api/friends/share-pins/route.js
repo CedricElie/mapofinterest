@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import crypto from 'crypto';
 
 export async function POST(request) {
   const userId = request.cookies.get('auth')?.value;
@@ -33,64 +32,19 @@ export async function POST(request) {
        return NextResponse.json({ error: 'No validated pins transferred' }, { status: 400 });
     }
 
-    // 2. Fetch Receiver's existing Category constraints
-    const friendCategories = await prisma.category.findMany({
-      where: { OR: [{ userId: friendId }, { userId: null }] }
-    });
-
     let sharedCount = 0;
 
     for (const pin of pinsToShare) {
-      let targetCategoryId = pin.category.id;
-      
-      // If the Category belongs to the Sender implicitly, Receiver cannot utilize it! 
-      // We check if they have a visually similar category, or we construct a new clone!
-      if (pin.category.userId === userId) {
-         const existingMatch = friendCategories.find(c => c.label.toLowerCase() === pin.category.label.toLowerCase());
-         if (existingMatch) {
-            targetCategoryId = existingMatch.id;
-         } else {
-            // Mints a localized custom category exclusively for Receiver
-            const newCatId = `cat-${crypto.randomUUID()}`;
-            const newCat = await prisma.category.create({
-               data: {
-                 id: newCatId,
-                 label: pin.category.label,
-                 color: pin.category.color,
-                 userId: friendId
-               }
-            });
-            // Persist the new array to avoid reminting duplicate categories during loops!
-            friendCategories.push(newCat);
-            targetCategoryId = newCat.id;
-         }
-      }
-
-      // 3. Systematically clone exactly the POI structure logically mapping Receiver ID globally!
-      const existing = await prisma.poi.findUnique({
-         where: {
-            userId_sharedPoiId: { userId: friendId, sharedPoiId: pin.sharedPoiId }
-         }
+      // Systematically connect the POI to the Receiver without duplicating entries
+      await prisma.poi.update({
+        where: { id: pin.id },
+        data: {
+          sharedWith: {
+            connect: { id: friendId }
+          }
+        }
       });
-      
-      if (!existing) {
-         await prisma.poi.create({
-            data: {
-               title: pin.title,
-               description: pin.description,
-               address: pin.address,
-               rating: pin.rating,
-               images: pin.images,
-               latitude: pin.latitude,
-               longitude: pin.longitude,
-               userId: friendId,
-               creatorName: pin.creatorName || currentUser.name,
-               categoryId: targetCategoryId,
-               sharedPoiId: pin.sharedPoiId
-            }
-         });
-         sharedCount++;
-      }
+      sharedCount++;
     }
 
     // 4. Dispatch Notifications Bi-Directionally!

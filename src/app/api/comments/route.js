@@ -37,9 +37,15 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
     }
 
-    // Verify user actually has access to this POI family (they have a pinned copy)
+    // Verify user actually has access to this POI (owner or shared recipient)
     const access = await prisma.poi.findFirst({
-       where: { sharedPoiId, userId }
+       where: { 
+         sharedPoiId,
+         OR: [
+           { userId },
+           { sharedWith: { some: { id: userId } } }
+         ]
+       }
     });
 
     if (!access) {
@@ -55,25 +61,29 @@ export async function POST(request) {
       include: { user: { select: { name: true, avatar: true } } }
     });
 
-    // Notify all participants who have a copy of this POI
-    const linkedPois = await prisma.poi.findMany({
+    // Notify all participants (Owner + All Recipients)
+    const poi = await prisma.poi.findFirst({
       where: { sharedPoiId },
-      select: { userId: true, title: true }
+      include: { 
+        sharedWith: { select: { id: true } }
+      }
     });
 
-    const userIdsToNotify = Array.from(new Set(linkedPois.map(p => p.userId))).filter(id => id !== userId);
-    const poiTitle = linkedPois[0]?.title || 'a place';
+    if (poi) {
+      const participants = new Set([poi.userId, ...poi.sharedWith.map(u => u.id)]);
+      participants.delete(userId); // Don't notify the commenter
 
-    if (userIdsToNotify.length > 0) {
-      await Promise.all(userIdsToNotify.map(id => 
-        prisma.notification.create({
-          data: {
-            userId: id,
-            type: 'NEW_COMMENT',
-            message: `${comment.user.name} commented on "${poiTitle}".`
-          }
-        })
-      ));
+      if (participants.size > 0) {
+        await Promise.all(Array.from(participants).map(id => 
+          prisma.notification.create({
+            data: {
+              userId: id,
+              type: 'NEW_COMMENT',
+              message: `${comment.user.name} commented on "${poi.title}".`
+            }
+          })
+        ));
+      }
     }
 
     return NextResponse.json(comment);

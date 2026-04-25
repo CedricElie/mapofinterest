@@ -6,11 +6,11 @@ A collaborative Next.js web application for mapping, exploring, and sharing your
 
 * **Interactive Mapping:** Drop pins, save locations, get directions, and explore the map.
 * **Social Sharing:** Add friends natively and easily share your custom map pins with them.
-* **Community Discussions:** Comment directly on shared places. All clones of a shared destination merge into one global conversation thread!
-* **Robust Permissions:** Unilateral edit and delete controls. Only the original author of a place may adjust or wipe the pin out globally.
+* **Community Discussions:** Comment directly on shared places. All participants join a single conversation thread linked to the original place!
+* **Robust Permissions:** Centralized control. Only the original author of a place can edit or delete the primary record.
 * **Real-time Notifications:** Receive instant dashboard notifications when a friend accepts your request, shares a place, or leaves a new comment.
 * **Customization:** Categorize places with personalized color-coding and descriptions.
-* **Data Integrity:** Protected by strict database-level unique constraints preventing duplicates and ensuring clean data clones.
+* **Data Integrity:** Optimized database architecture using many-to-many relationships to ensure zero data duplication and instant updates across all participants.
 
 ## 🛠 Tech Stack
 

@@ -38,7 +38,7 @@ function PinComments({ sharedPoiId }) {
       <h4 style={{ fontSize: '0.85rem', margin: '0 0 8px 0', opacity: 0.8 }}>Comments</h4>
       <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
         <input value={text} onChange={e => setText(e.target.value)} placeholder="Add a comment..." style={{ flex: 1, padding: '8px', borderRadius: '6px', border: '1px solid var(--surface-border)', background: 'var(--input-bg)', color: 'var(--foreground-dark)', fontSize: '0.8rem' }} />
-        <button onClick={postComment} disabled={!text} style={{ padding: '0 12px', borderRadius: '6px', background: text ? 'var(--primary)' : 'transparent', color: text ? '#fff' : 'var(--foreground-dark)', border: text ? 'none' : '1px solid var(--surface-border)', fontSize: '0.8rem', fontWeight: 600 }}>Post</button>
+        <button onClick={postComment} disabled={!text} style={{ padding: '0 12px', borderRadius: '6px', background: text ? 'var(--primary)' : 'transparent', color: text ? '#fff' : 'var(--foreground-dark)', border: text ? 'none' : '1px solid var(--surface-border)', fontSize: '0.8rem', fontWeight: 600 }}>Comment</button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }} className="custom-scrollbar">
         {comments.length === 0 ? <p style={{ fontSize: '0.8rem', opacity: 0.6, margin: 0 }}>No comments yet.</p> :
@@ -644,14 +644,14 @@ export default function Home() {
             fontSize: '1.8rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px',
             color: 'var(--primary)', letterSpacing: '-0.5px'
           }}>
-            <span>✨</span> Places of Interest
+            <span>✨</span> Map of Interest
           </h1>
           {currentUser && (
             <p style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--foreground)', marginBottom: '6px' }}>
               Hello, {currentUser.name}! 👋
             </p>
           )}
-          <p style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 500, margin: 0 }}>Discover and share your places of interest.</p>
+          <p style={{ fontSize: '0.95rem', opacity: 0.85, fontWeight: 500, margin: 0 }}>Mapping, exploring, and sharing your favorite places together.</p>
         </div>
 
         {/* Sidebar Body */}
