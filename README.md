@@ -1,3 +1,17 @@
+<div align="center">
+  
+# 🗺️ Map of Interest ✨
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
+[![Prisma](https://img.shields.io/badge/Prisma-ORM-1B222D?logo=prisma)](https://prisma.io)
+
+**A collaborative web application for mapping, exploring, and sharing your favorite places!**
+
+</div>
+
+---
 # Map of Interest 🌍✨
 
 A collaborative Next.js web application for mapping, exploring, and sharing your favorite places!
